@@ -71,6 +71,13 @@ def load_config() -> dict:
             log(f"Warning: Failed to parse {CONFIG_PATH}: {e}. Using defaults.")
     return default_config
 
+def save_config(cfg: dict):
+    try:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
+
 class AirBridgeDaemon:
     def __init__(self):
         self.config = load_config()
@@ -83,7 +90,32 @@ class AirBridgeDaemon:
         self.current_job = None
         self.paused_until = None
         self.lid_closed = False
+        self.last_update_check = 0
         self.current_gear = "Gear 1: Whisper Writing (Max Cold & User Priority)"
+
+    def check_online_update(self):
+        try:
+            url = "https://raw.githubusercontent.com/fablab503-collab/airbridge/main/version.json"
+            req = urllib.request.Request(url, headers={"User-Agent": "AirBridge-Daemon"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    online_ver = data.get("version", "")
+                    cur_ver = self.config.get("version", "1.0.0")
+                    if online_ver and online_ver != cur_ver:
+                        log(f"🔄 Online update available: v{online_ver} (current: v{cur_ver}). Updating online...")
+                        daemon_url = "https://raw.githubusercontent.com/fablab503-collab/airbridge/main/air_bridge_daemon.py"
+                        with urllib.request.urlopen(daemon_url, timeout=6) as d_resp:
+                            if d_resp.status == 200:
+                                script_path = Path(__file__).resolve()
+                                script_path.write_bytes(d_resp.read())
+                                self.config["version"] = online_ver
+                                save_config(self.config)
+                                log(f"✅ Updated to v{online_ver} online. Restarting daemon...")
+                                self.stop_llama_server()
+                                os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception:
+            pass
 
     def is_lid_closed(self) -> bool:
         try:
@@ -156,6 +188,12 @@ class AirBridgeDaemon:
         log("Resource Circuit-Breaker & Lid Standby Watchdog started. Computer tasks have 1st priority.")
         while self.running:
             time.sleep(3)
+
+            # --- Check Online Updates (Online Only) ---
+            now = time.time()
+            if now - self.last_update_check > 21600:  # 6 hours
+                self.last_update_check = now
+                threading.Thread(target=self.check_online_update, daemon=True).start()
 
             # --- 1. Lid State Detection (Clamshell / Standby Modality) ---
             lid_is_closed = self.is_lid_closed()
