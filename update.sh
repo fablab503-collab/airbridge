@@ -30,6 +30,8 @@ fi
 echo "Downloading update..."
 curl -sSL "$DOWNLOAD_URL" | tar -xz -C "$TARGET_DIR"
 chmod +x "$TARGET_DIR/macluster"
+xattr -dr com.apple.quarantine "$TARGET_DIR" 2>/dev/null || true
+codesign -s - -f "$TARGET_DIR/macluster" 2>/dev/null || true
 ln -sf "$TARGET_DIR/macluster" "$BIN_DIR/macluster"
 ln -sf "$TARGET_DIR/macluster" "$BIN_DIR/airbridge"
 

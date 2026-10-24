@@ -101,8 +101,10 @@ else
     curl -L "https://huggingface.co/LiquidCloud/LFM-2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_K_M.gguf" -o "$MODEL_PATH" || true
 fi
 
-# Strip quarantine
+# Strip quarantine and apply valid ad-hoc code signature
 xattr -dr com.apple.quarantine "$TARGET_DIR" 2>/dev/null || true
+codesign -s - -f "$TARGET_DIR/macluster" 2>/dev/null || true
+codesign -s - -f "$TARGET_DIR/bin/llama-server" 2>/dev/null || true
 
 # 4. Configure & Start LaunchAgent
 echo ""
