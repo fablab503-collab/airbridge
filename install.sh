@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # ========================================================================================
-# ⚡ AIRBRIDGE ONLINE INSTALLER
-# One command installs the complete autonomous Apple Silicon compute bridge.
+# ⚡ AIRBRIDGE ONLINE 1-CLICK INSTALLER (RUST CORE)
+# Downloads and configures the native Apple Silicon Rust engine.
+# Zero Python required. Zero Homebrew required. Zero Xcode CLT required.
 # ========================================================================================
 set -e
 
 REPO_RAW="https://raw.githubusercontent.com/fablab503-collab/airbridge/main"
+RELEASE_URL="https://github.com/fablab503-collab/airbridge/releases/download/v1.5.0"
 TARGET_DIR="$HOME/Library/Application Support/Air Compute Bridge"
 BIN_DIR="$HOME/.local/bin"
 PLIST_FILE="$HOME/Library/LaunchAgents/com.danielmadac.air-compute-bridge.plist"
@@ -15,61 +17,42 @@ LABEL="com.danielmadac.air-compute-bridge"
 
 clear
 echo "========================================================================================"
-echo "⚡  AIRBRIDGE — ONLINE 1-CLICK INSTALLER"
+echo "⚡  AIRBRIDGE — 1-CLICK RUST CORE INSTALLER"
 echo "========================================================================================"
-echo "Downloading and configuring background compute bridge from GitHub..."
+echo "Installing native Apple Silicon Rust engine (Zero Python / Zero Homebrew)..."
 echo "========================================================================================"
 echo ""
 
-mkdir -p "$TARGET_DIR" "$TARGET_DIR/models" "$TARGET_DIR/queue" "$BIN_DIR" "$HOME/Library/Logs" "$HOME/Library/LaunchAgents"
+mkdir -p "$TARGET_DIR" "$TARGET_DIR/models" "$TARGET_DIR/queue" "$TARGET_DIR/cache" "$BIN_DIR" "$HOME/Library/Logs" "$HOME/Library/LaunchAgents"
 
-# 1. Download core scripts online
-echo "[1/5] 🌐 Fetching latest daemon & telemetry from GitHub..."
-curl -sSL "$REPO_RAW/air_bridge_daemon.py" -o "$TARGET_DIR/air_bridge_daemon.py"
-curl -sSL "$REPO_RAW/mesh_monitor.py" -o "$TARGET_DIR/mesh_monitor.py"
-curl -sSL "$REPO_RAW/Air%20Compute%20Bridge" -o "$TARGET_DIR/Air Compute Bridge"
-curl -sSL "$REPO_RAW/air_dispatch.py" -o "$TARGET_DIR/air_dispatch.py"
-curl -sSL "$REPO_RAW/update.sh" -o "$TARGET_DIR/update.sh"
-curl -sSL "$REPO_RAW/uninstall.sh" -o "$TARGET_DIR/uninstall.sh"
-curl -sSL "$REPO_RAW/config.json" -o "$TARGET_DIR/config.json" 2>/dev/null || true
-chmod +x "$TARGET_DIR/air_bridge_daemon.py" "$TARGET_DIR/mesh_monitor.py" "$TARGET_DIR/Air Compute Bridge" "$TARGET_DIR/update.sh" "$TARGET_DIR/uninstall.sh"
+# 1. Download Native Rust Engine (1.1 MB)
+echo "[1/4] 🦀 Downloading native Apple Silicon Rust core (~1.1 MB)..."
+curl -sSL "$RELEASE_URL/airbridge-aarch64.tar.gz" | tar -xz -C "$TARGET_DIR"
+chmod +x "$TARGET_DIR/airbridge"
+ln -sf "$TARGET_DIR/airbridge" "$BIN_DIR/airbridge"
+ln -sf "$TARGET_DIR/airbridge" "$BIN_DIR/air-bridge"
+echo "      ✅ Native Rust engine installed: $TARGET_DIR/airbridge"
 
-# 2. Standalone Python 3.12 (Zero Xcode CLT / Zero Homebrew)
+# 2. Download Standalone Metal AI Engine (9.4 MB)
 echo ""
-echo "[2/5] 🐍 Setting up standalone Apple Silicon Python runtime..."
-PYTHON=""
-if [ -x "$TARGET_DIR/python/bin/python3" ]; then
-    PYTHON="$TARGET_DIR/python/bin/python3"
-elif [ -x "/opt/homebrew/bin/python3" ]; then
-    PYTHON="/opt/homebrew/bin/python3"
-elif command -v python3 >/dev/null 2>&1 && xcode-select -p >/dev/null 2>&1 && python3 -c "import sys" 2>/dev/null; then
-    PYTHON="$(command -v python3)"
-else
-    echo "      Downloading standalone Apple Silicon Python 3.12 (~15 MB)..."
-    curl -sSL "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7+20241016-aarch64-apple-darwin-install_only.tar.gz" | tar -xz -C "$TARGET_DIR"
-    PYTHON="$TARGET_DIR/python/bin/python3"
-fi
-chmod +x "$TARGET_DIR/python/bin/python3" 2>/dev/null || true
-echo "      ✅ Python standard: $PYTHON"
-
-# 3. Apple Silicon Metal Inference Engine
-echo ""
-echo "[3/5] ⚙️  Setting up Apple Metal GPU AI engine..."
+echo "[2/4] ⚙️  Downloading Apple Metal GPU inference engine (~9.4 MB)..."
 if [ ! -f "$TARGET_DIR/bin/llama-server" ]; then
-    echo "      Downloading pre-compiled Metal inference engine (~9.4 MB)..."
-    curl -sSL "https://github.com/fablab503-collab/airbridge/releases/download/v1.4.0/metal-engine-aarch64.tar.gz" | tar -xz -C "$TARGET_DIR"
+    curl -sSL "$RELEASE_URL/metal-engine-aarch64.tar.gz" | tar -xz -C "$TARGET_DIR"
 fi
 chmod +x "$TARGET_DIR/bin/llama-server" 2>/dev/null || true
 echo "      ✅ Metal engine ready."
 
-# 4. Model Verification (LiquidAI 2.6B)
+# 3. Model Verification
 echo ""
-echo "[4/5] 🧠 Verifying AI Model..."
+echo "[3/4] 🧠 Verifying LiquidAI 2.6B Model..."
 MODEL_PATH="$TARGET_DIR/models/LFM2.5-2.6B-Q4_K_M.gguf"
 if [ ! -f "$MODEL_PATH" ]; then
     if [ -f "/Volumes/Volume1/SecondBrain/Models/LiquidAI/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q4_K_M.gguf" ]; then
-        echo "      Found LiquidAI 2.6B on Synology NAS (/Volumes/Volume1)..."
+        echo "      Linking LiquidAI 2.6B from Synology NAS..."
         cp "/Volumes/Volume1/SecondBrain/Models/LiquidAI/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q4_K_M.gguf" "$MODEL_PATH" 2>/dev/null || true
+    elif [ -f "/Volumes/256Gb/Air-Compute-Bridge/models/LFM2.5-2.6B-Q4_K_M.gguf" ]; then
+        echo "      Copying pre-loaded model from USB-C key..."
+        cp "/Volumes/256Gb/Air-Compute-Bridge/models/LFM2.5-2.6B-Q4_K_M.gguf" "$MODEL_PATH" 2>/dev/null || true
     fi
 fi
 
@@ -80,48 +63,12 @@ else
     curl -L "https://huggingface.co/LiquidCloud/LFM-2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_K_M.gguf" -o "$MODEL_PATH" || true
 fi
 
-# Configure config.json
-cat <<EOF > "$TARGET_DIR/config.json"
-{
-  "service_name": "QuickText Intelligence",
-  "version": "1.4.0",
-  "stealth_mode": true,
-  "stealth_label": "com.apple.quicktextd",
-  "host": "127.0.0.1",
-  "port": 8085,
-  "internal_llama_port": 8086,
-  "llama_bin": "$TARGET_DIR/bin/llama-server",
-  "model_path": "$MODEL_PATH",
-  "ram_limit_mb": 4096,
-  "ctx_size": 4096,
-  "gpu_layers": 99,
-  "threads": 1,
-  "nice_priority": 19,
-  "user_priority_circuit_breaker": true,
-  "min_system_free_ram_mb": 2048,
-  "auto_pause_cooldown_sec": 600,
-  "nas_queue_enabled": true,
-  "nas_mount_path": "/Volumes/Volume1",
-  "nas_queue_dir": "/Volumes/Volume1/SecondBrain/00 Chat Zero/AirQueue",
-  "local_queue_dir": "$TARGET_DIR/queue",
-  "queue_poll_interval_sec": 5,
-  "low_battery_pause_threshold": 20
-}
-EOF
-
 # Strip quarantine
 xattr -dr com.apple.quarantine "$TARGET_DIR" 2>/dev/null || true
 
-# Symlinks
-ln -sf "$TARGET_DIR/update.sh" "$BIN_DIR/air-bridge-update" 2>/dev/null || true
-ln -sf "$TARGET_DIR/mesh_monitor.py" "$BIN_DIR/mesh-status" 2>/dev/null || true
-if [ -x "$TARGET_DIR/python/bin/python3" ]; then
-    ln -sf "$TARGET_DIR/python/bin/python3" "$BIN_DIR/python3" 2>/dev/null || true
-fi
-
-# 5. LaunchAgent
+# 4. Configure & Start LaunchAgent
 echo ""
-echo "[5/5] 🛡️  Installing LaunchAgent..."
+echo "[4/4] 🛡️  Installing LaunchAgent..."
 cat <<EOF > "$PLIST_FILE"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -131,7 +78,8 @@ cat <<EOF > "$PLIST_FILE"
     <string>com.danielmadac.air-compute-bridge</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$TARGET_DIR/Air Compute Bridge</string>
+        <string>$TARGET_DIR/airbridge</string>
+        <string>daemon</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -161,11 +109,21 @@ launchctl kickstart -k "$DOMAIN/$LABEL" 2>/dev/null || true
 
 echo ""
 echo "========================================================================================"
-echo "🎉  AIRBRIDGE ONLINE INSTALLATION COMPLETE!"
+echo "🎉  AIRBRIDGE (RUST ENGINE) INSTALLED SUCCESSFULLY!"
 echo "========================================================================================"
-echo "Status:   🟢 ONLINE (Running in background on 127.0.0.1)"
-echo "Standby:  😴 0W Lid-Closed Standby Active"
-echo "Updates:  🌐 Future updates are 100% ONLINE via 'air-bridge-update'"
+echo "Engine:          🦀 100% Native Rust Core (1.9 MB, Zero Python, Zero Homebrew)"
+echo "Baseline Power:  ⚡ 30% Host Capacity by default"
+echo "Standby:         😴 0.0W Lid-Closed Standby (Auto-revive on lid open)"
+echo "Circuit Breaker: 🧠 10-Minute User Priority Circuit-Breaker (<2GB Free RAM)"
+echo "Cache Guard:     🧹 10 GB Auto-Purge Manager"
+echo "Swarm Mesh:      🌐 Distributed Failover Relay active"
+echo "========================================================================================"
+echo ""
+echo "Terminal Commands available anywhere:"
+echo "  airbridge status         # View live status and memory allocation"
+echo "  airbridge boost 5        # Remote 80% Power Burst for 5 minutes"
+echo "  airbridge swarm          # View pooled RAM and cores across all computers"
+echo "  airbridge cache          # Check cache and purge if near 10GB"
 echo "========================================================================================"
 echo ""
 read -t 8 -p "Closing in 8 seconds..." dummy || true

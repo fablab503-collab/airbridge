@@ -1,13 +1,18 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
+  "engine": "rust",
   "released_at": "2026-10-24",
-  "engine_url": "https://github.com/fablab503-collab/airbridge/releases/download/v1.4.0/metal-engine-aarch64.tar.gz",
-  "python_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7+20241016-aarch64-apple-darwin-install_only.tar.gz",
+  "rust_binary_url": "https://github.com/fablab503-collab/airbridge/releases/download/v1.5.0/airbridge-aarch64.tar.gz",
+  "metal_engine_url": "https://github.com/fablab503-collab/airbridge/releases/download/v1.4.0/metal-engine-aarch64.tar.gz",
   "features": [
-    "Lid-Closed Zero-Power Standby (AppleClamshellState detection)",
-    "Lid-Open Auto-Revive",
-    "Standalone Python 3.12 (Zero Xcode CLT / Zero Homebrew)",
-    "Computer-First 10-Minute RAM Circuit-Breaker (<2GB threshold)",
-    "Adaptive Whisper Duty-Cycle Governor (8s cooling pauses)"
+    "100% Native Rust Engine (Zero Python, Zero Homebrew, Zero Xcode CLT)",
+    "Capacity-Aware Dynamic Sizing (30% Baseline Capacity Rule)",
+    "Micro-Throttle to 1 CPU + 1 GB RAM when user runs heavy tasks",
+    "Remote Control 80% Power Burst (airbridge boost <minutes>)",
+    "10 GB Auto-Purge Cache Manager",
+    "Multi-Node Distributed Swarm Hive (2 to 1000 computers pooled over WiFi/Internet/Cellular)",
+    "Failover Relay Lease: Next node takes over if a computer dies or closes lid",
+    "0W Lid-Closed Standby via IOKit AppleClamshellState",
+    "10-Minute User Priority Circuit Breaker (<2GB Free RAM)"
   ]
 }
