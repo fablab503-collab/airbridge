@@ -9,8 +9,10 @@ DOMAIN="gui/$(id -u)"
 TARGET_DIR="$HOME/Library/Application Support/MACLUSTER"
 OLD_TARGET="$HOME/Library/Application Support/Air Compute Bridge"
 PLIST_FILE="$HOME/Library/LaunchAgents/com.danielmadac.macluster.plist"
+UPDATE_PLIST="$HOME/Library/LaunchAgents/com.danielmadac.macluster-autoupdate.plist"
 OLD_PLIST="$HOME/Library/LaunchAgents/com.danielmadac.air-compute-bridge.plist"
 LOG_FILE="$HOME/Library/Logs/macluster.log"
+UPDATE_LOG="$HOME/Library/Logs/macluster-autoupdate.log"
 OLD_LOG="$HOME/Library/Logs/air-compute-bridge.log"
 
 echo "========================================================================================"
@@ -21,6 +23,8 @@ echo "Stopping background processes and removing all files..."
 # Unload daemons
 launchctl bootout "$DOMAIN" "$PLIST_FILE" 2>/dev/null || true
 launchctl bootout "$DOMAIN/com.danielmadac.macluster" 2>/dev/null || true
+launchctl bootout "$DOMAIN" "$UPDATE_PLIST" 2>/dev/null || true
+launchctl bootout "$DOMAIN/com.danielmadac.macluster-autoupdate" 2>/dev/null || true
 launchctl bootout "$DOMAIN" "$OLD_PLIST" 2>/dev/null || true
 launchctl bootout "$DOMAIN/com.danielmadac.air-compute-bridge" 2>/dev/null || true
 
@@ -33,15 +37,16 @@ pkill -f "airbridge" 2>/dev/null || true
 rm -f "$HOME/.local/bin/macluster"
 rm -f "$HOME/.local/bin/airbridge"
 rm -f "$HOME/.local/bin/air-bridge"
+sudo rm -f "/usr/local/bin/macluster" 2>/dev/null || true
 
 # Remove Plists
-rm -f "$PLIST_FILE" "$OLD_PLIST"
+rm -f "$PLIST_FILE" "$UPDATE_PLIST" "$OLD_PLIST"
 
 # Remove Application Support folders
 rm -rf "$TARGET_DIR" "$OLD_TARGET"
 
 # Remove Logs
-rm -f "$LOG_FILE" "$OLD_LOG"
+rm -f "$LOG_FILE" "$UPDATE_LOG" "$OLD_LOG"
 
 echo ""
 echo "========================================================================================"
