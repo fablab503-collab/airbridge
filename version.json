@@ -1,0 +1,13 @@
+{
+  "version": "1.4.0",
+  "released_at": "2026-10-24",
+  "engine_url": "https://github.com/fablab503-collab/airbridge/releases/download/v1.4.0/metal-engine-aarch64.tar.gz",
+  "python_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7+20241016-aarch64-apple-darwin-install_only.tar.gz",
+  "features": [
+    "Lid-Closed Zero-Power Standby (AppleClamshellState detection)",
+    "Lid-Open Auto-Revive",
+    "Standalone Python 3.12 (Zero Xcode CLT / Zero Homebrew)",
+    "Computer-First 10-Minute RAM Circuit-Breaker (<2GB threshold)",
+    "Adaptive Whisper Duty-Cycle Governor (8s cooling pauses)"
+  ]
+}

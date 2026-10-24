@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.danielmadac.air-compute-bridge</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__USER_HOME__/Library/Application Support/Air Compute Bridge/Air Compute Bridge</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>__USER_HOME__/Library/Logs/air-compute-bridge.log</string>
+    <key>StandardErrorPath</key>
+    <string>__USER_HOME__/Library/Logs/air-compute-bridge.log</string>
+    <key>WorkingDirectory</key>
+    <string>__USER_HOME__/Library/Application Support/Air Compute Bridge</string>
+</dict>
+</plist>

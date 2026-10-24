@@ -1,0 +1,8 @@
+#!/bin/bash
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$DIR" || exit 1
+PYTHON="/usr/bin/python3"
+if [ -x "/opt/homebrew/bin/python3" ]; then
+    PYTHON="/opt/homebrew/bin/python3"
+fi
+exec "$PYTHON" "$DIR/air_bridge_daemon.py"
