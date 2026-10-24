@@ -1,32 +1,44 @@
 #!/usr/bin/env bash
 # ========================================================================================
-# 🔄 AIRBRIDGE ONLINE RUST UPDATER
+# 🔄 MACLUSTER ONLINE UPDATER
+# Downloads latest native Rust binary release and gracefully restarts daemon.
 # ========================================================================================
 set -e
 
-RELEASE_URL="https://github.com/fablab503-collab/airbridge/releases/download/v1.5.0"
-TARGET_DIR="$HOME/Library/Application Support/Air Compute Bridge"
+REPO_RAW="https://raw.githubusercontent.com/fablab503-collab/airbridge/main"
+TARGET_DIR="$HOME/Library/Application Support/MACLUSTER"
 BIN_DIR="$HOME/.local/bin"
 DOMAIN="gui/$(id -u)"
-LABEL="com.danielmadac.air-compute-bridge"
+LABEL="com.danielmadac.macluster"
 
-clear
 echo "========================================================================================"
-echo "🔄  AIRBRIDGE — ONLINE RUST UPDATER"
+echo "🔄  MACLUSTER ONLINE UPDATER"
 echo "========================================================================================"
-echo "Downloading latest native Rust binary from GitHub (1.1 MB)..."
-echo ""
 
-mkdir -p "$TARGET_DIR" "$BIN_DIR"
-curl -sSL "$RELEASE_URL/airbridge-aarch64.tar.gz" | tar -xz -C "$TARGET_DIR"
-chmod +x "$TARGET_DIR/airbridge"
-ln -sf "$TARGET_DIR/airbridge" "$BIN_DIR/airbridge"
-ln -sf "$TARGET_DIR/airbridge" "$BIN_DIR/air-bridge"
-xattr -dr com.apple.quarantine "$TARGET_DIR/airbridge" 2>/dev/null || true
+LATEST_JSON=$(curl -sSL "$REPO_RAW/version.json")
+LATEST_VERSION=$(echo "$LATEST_JSON" | grep '"version"' | head -n 1 | awk -F '"' '{print $4}')
+DOWNLOAD_URL=$(echo "$LATEST_JSON" | grep '"rust_binary_url"' | head -n 1 | awk -F '"' '{print $4}')
+
+echo "Checking online updates..."
+echo "Online Version: v$LATEST_VERSION"
+
+if [ -z "$DOWNLOAD_URL" ]; then
+    echo "❌ Failed to retrieve download URL from GitHub."
+    exit 1
+fi
+
+echo "Downloading update..."
+curl -sSL "$DOWNLOAD_URL" | tar -xz -C "$TARGET_DIR"
+chmod +x "$TARGET_DIR/macluster"
+ln -sf "$TARGET_DIR/macluster" "$BIN_DIR/macluster"
+ln -sf "$TARGET_DIR/macluster" "$BIN_DIR/airbridge"
 
 echo "Restarting service..."
 launchctl kickstart -k "$DOMAIN/$LABEL" 2>/dev/null || true
 
-echo "✅ AirBridge updated to latest Rust release (v1.5.0)!"
-read -t 5 -p "Closing in 5 seconds..." dummy || true
-exit 0
+sleep 1
+echo ""
+echo "========================================================================================"
+echo "✅ MACLUSTER UPDATED TO v$LATEST_VERSION SUCCESSFULLY!"
+echo "========================================================================================"
+"$BIN_DIR/macluster" status || true

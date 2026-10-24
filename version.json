@@ -1,18 +1,20 @@
 {
-  "version": "1.5.0",
+  "version": "2.0.0",
+  "name": "MACLUSTER",
   "engine": "rust",
   "released_at": "2026-10-24",
-  "rust_binary_url": "https://github.com/fablab503-collab/airbridge/releases/download/v1.5.0/airbridge-aarch64.tar.gz",
+  "rust_binary_url": "https://github.com/fablab503-collab/airbridge/releases/download/v2.0.0/macluster-aarch64.tar.gz",
   "metal_engine_url": "https://github.com/fablab503-collab/airbridge/releases/download/v1.4.0/metal-engine-aarch64.tar.gz",
   "features": [
     "100% Native Rust Engine (Zero Python, Zero Homebrew, Zero Xcode CLT)",
-    "Capacity-Aware Dynamic Sizing (30% Baseline Capacity Rule)",
-    "Micro-Throttle to 1 CPU + 1 GB RAM when user runs heavy tasks",
-    "Remote Control 80% Power Burst (airbridge boost <minutes>)",
-    "10 GB Auto-Purge Cache Manager",
+    "Capacity-Aware Dynamic Sizing (30% Baseline Capacity of host RAM/CPU/GPU)",
+    "Micro-Throttle to 1 CPU + 1 GPU + 1 GB RAM when user tasks demand power",
+    "10-Minute User Priority Circuit Breaker if killed or free RAM < 2GB",
+    "Remote Control 80% Power Burst (macluster boost <minutes>)",
+    "10 GB Auto-Purge Cache Manager (drops to 5GB when 10GB reached)",
     "Multi-Node Distributed Swarm Hive (2 to 1000 computers pooled over WiFi/Internet/Cellular)",
-    "Failover Relay Lease: Next node takes over if a computer dies or closes lid",
+    "30-Second Atomic Failover Lease: next node takes over relay if a computer dies or sleeps",
     "0W Lid-Closed Standby via IOKit AppleClamshellState",
-    "10-Minute User Priority Circuit Breaker (<2GB Free RAM)"
+    "Zero-Noise 2-File UX (Install MACLUSTER.command & Uninstall MACLUSTER.command)"
   ]
 }
