@@ -16,7 +16,7 @@ LOG_FILE="$HOME/Library/Logs/macluster.log"
 DOMAIN="gui/$(id -u)"
 LABEL="com.danielmadac.macluster"
 
-clear
+[ -t 1 ] && clear 2>/dev/null || true
 echo "========================================================================================"
 echo "⚡  MACLUSTER — 1-CLICK AUTONOMOUS SWARM INSTALLER (v2.0.0)"
 echo "========================================================================================"
@@ -79,12 +79,18 @@ echo ""
 echo "[3/4] 🧠 Verifying LiquidAI 2.6B model..."
 MODEL_PATH="$TARGET_DIR/models/LFM2.5-2.6B-Q4_K_M.gguf"
 if [ ! -f "$MODEL_PATH" ]; then
-    if [ -f "/Volumes/Volume1/SecondBrain/Models/LiquidAI/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q4_K_M.gguf" ]; then
-        echo "      Copying model from Synology NAS..."
-        cp "/Volumes/Volume1/SecondBrain/Models/LiquidAI/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q4_K_M.gguf" "$MODEL_PATH" 2>/dev/null || true
+    if [ -f "$HOME/Library/Application Support/Air Compute Bridge/models/LFM2.5-2.6B-Q4_K_M.gguf" ]; then
+        echo "      Reusing model from local installation..."
+        cp -c "$HOME/Library/Application Support/Air Compute Bridge/models/LFM2.5-2.6B-Q4_K_M.gguf" "$MODEL_PATH" 2>/dev/null || cp "$HOME/Library/Application Support/Air Compute Bridge/models/LFM2.5-2.6B-Q4_K_M.gguf" "$MODEL_PATH" 2>/dev/null || true
     elif [ -n "$LOCAL_CORE" ] && [ -f "$LOCAL_CORE/models/LFM2.5-2.6B-Q4_K_M.gguf" ]; then
         echo "      Copying model from local media..."
         cp "$LOCAL_CORE/models/LFM2.5-2.6B-Q4_K_M.gguf" "$MODEL_PATH" 2>/dev/null || true
+    elif [ -f "/Volumes/256Gb/Air-Compute-Bridge/models/LFM2.5-2.6B-Q4_K_M.gguf" ]; then
+        echo "      Copying model from USB key..."
+        cp "/Volumes/256Gb/Air-Compute-Bridge/models/LFM2.5-2.6B-Q4_K_M.gguf" "$MODEL_PATH" 2>/dev/null || true
+    elif [ -f "/Volumes/Volume1/SecondBrain/Models/LiquidAI/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q4_K_M.gguf" ]; then
+        echo "      Copying model from Synology NAS..."
+        cp "/Volumes/Volume1/SecondBrain/Models/LiquidAI/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q4_K_M.gguf" "$MODEL_PATH" 2>/dev/null || true
     fi
 fi
 
