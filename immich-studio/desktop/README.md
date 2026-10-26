@@ -8,7 +8,7 @@ The first start asks for the server address (Tailscale `https://…` or the iMac
 
 * **Windows / macOS / Linux**: GitHub → **Actions** → *Gimmich desktop* → latest run → **Artifacts**
   (`Gimmich-windows` = `.exe` installer, `Gimmich-macos` = `.dmg`, `Gimmich-linux` = `.deb` + `.AppImage`).
-* Linux `.deb` is also in `release/`.
+* Ready-made copies are also in `release/` (Windows `.exe`, Mac `.dmg`, Linux `.deb`), and every Gimmich offers the right one on *Connect a device*.
 
 The apps are not signed with an Apple or Microsoft certificate (those cost money and need your own account), so:
 * **macOS**: right-click the app → **Open** → **Open** the first time.

@@ -6,6 +6,7 @@ on:
   push:
     paths:
       - "immich-studio/desktop/**"
+      - "!immich-studio/desktop/release/**" # finished installers copied back in: no need to rebuild
       - ".github/workflows/gimmich-desktop.yml"
   workflow_dispatch:
 
