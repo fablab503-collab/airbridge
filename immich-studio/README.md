@@ -42,6 +42,10 @@ sets up Immich + Gimmich Studio in `~/gimmich`, keeps the Mac awake, gives it a 
 opens **Connect a device**. Run it again any time to update. Options: `PHOTOS_DIR=/Volumes/Big/Photos` (external
 drive), `GIMMICH_PORT=2283`, `SKIP_TAILSCALE=1`, `YES=1` (put them before `bash`).
 
+**Already have Immich on this computer?** The installer finds it (Docker) and adds Gimmich Studio to *that*
+Immich: same photos, albums, people and logins, same address, and Immich itself is not updated or changed.
+It asks before doing so.
+
 ### Connect your phone, tablet and laptop
 
 1. Install **Tailscale** on the device and log in with the same account as the iMac.

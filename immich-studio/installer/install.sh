@@ -6,6 +6,7 @@
 # What it does (it asks before anything big):
 #   1. installs Docker and Tailscale if they are missing
 #   2. downloads Immich + Gimmich Studio into ~/gimmich and starts them
+#      (if Immich is already on this computer, it adds Gimmich Studio to that Immich instead)
 #   3. keeps the computer awake and restarts it after a power cut (Mac)
 #   4. gives Gimmich a private https:// address with Tailscale and shows a QR code to connect your devices
 #
@@ -65,15 +66,43 @@ if [ -z "${SKIP_TAILSCALE:-}" ] && ! have tailscale; then
   fi
 fi
 
+# -------------------------------------------- Immich already on this computer? ---
+# A second Immich would take over the first one's containers, so Gimmich is added to the Immich
+# that is already here instead: same photos, albums, people and logins.
+EXISTING_DIR="" EXISTING_FILES="" EXISTING_PROJECT=""
+found="$(docker ps -a --filter label=com.docker.compose.service=immich-server \
+  --format '{{.Label "com.docker.compose.project.working_dir"}}|{{.Label "com.docker.compose.project.config_files"}}|{{.Label "com.docker.compose.project"}}' | head -1)"
+if [ -n "$found" ]; then
+  IFS='|' read -r EXISTING_DIR EXISTING_FILES EXISTING_PROJECT <<<"$found"
+  if [ -f "$EXISTING_DIR/.env.gimmich" ]; then
+    GIMMICH_DIR="$EXISTING_DIR"           # installed by this installer before: just update it
+    EXISTING_DIR=""
+  else
+    bold "Found your Immich"
+    info "Folder: $EXISTING_DIR"
+    info "Gimmich Studio will be added to it. Your photos, albums, people and logins stay as they are,"
+    info "and Immich keeps its address (port $GIMMICH_PORT); Immich itself is not updated or changed."
+    ask "Add Gimmich Studio to this Immich?" || fail "Stopped. Nothing was changed."
+    GIMMICH_DIR="$EXISTING_DIR"
+  fi
+elif (echo >"/dev/tcp/127.0.0.1/$GIMMICH_PORT") 2>/dev/null; then
+  # something else (maybe an Immich not run by Docker) already answers on that port
+  for p in $(seq $((GIMMICH_PORT + 1)) $((GIMMICH_PORT + 20))); do
+    (echo >"/dev/tcp/127.0.0.1/$p") 2>/dev/null || { info "Port $GIMMICH_PORT is busy on this computer; Gimmich will use $p."; GIMMICH_PORT="$p"; break; }
+  done
+fi
+
 # --------------------------------------------------------- 2. download & run ---
-bold "2/4  Downloading Immich and Gimmich Studio"
-mkdir -p "$GIMMICH_DIR" "$PHOTOS_DIR"
-cd "$GIMMICH_DIR"
-curl -fsSL -o docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
-if [ ! -f .env ]; then  # keep the existing password on re-install / update
-  curl -fsSL -o .env https://github.com/immich-app/immich/releases/latest/download/example.env
-  PASS="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24 || true)"
-  sed -i.bak -e "s|^UPLOAD_LOCATION=.*|UPLOAD_LOCATION=$PHOTOS_DIR|" -e "s|^DB_PASSWORD=.*|DB_PASSWORD=$PASS|" .env && rm -f .env.bak
+bold "2/4  Downloading Gimmich Studio${EXISTING_DIR:+ (keeping your Immich)}"
+cd "$GIMMICH_DIR" 2>/dev/null || { mkdir -p "$GIMMICH_DIR" && cd "$GIMMICH_DIR"; }
+if [ -z "$EXISTING_DIR" ]; then
+  mkdir -p "$PHOTOS_DIR"
+  curl -fsSL -o docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+  if [ ! -f .env ]; then  # keep the existing password on re-install / update
+    curl -fsSL -o .env https://github.com/immich-app/immich/releases/latest/download/example.env
+    PASS="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24 || true)"
+    sed -i.bak -e "s|^UPLOAD_LOCATION=.*|UPLOAD_LOCATION=$PHOTOS_DIR|" -e "s|^DB_PASSWORD=.*|DB_PASSWORD=$PASS|" .env && rm -f .env.bak
+  fi
 fi
 echo "GIMMICH_PORT=$GIMMICH_PORT" > .env.gimmich
 
@@ -89,9 +118,21 @@ fetch_studio() {
 fetch_studio "${GIMMICH_REF:-main}" || fetch_studio "$FALLBACK_REF" || fail "Couldn't download Gimmich Studio."
 ok "Downloaded"
 
-COMPOSE=(docker compose -f docker-compose.yml -f immich-studio/docker-compose.studio.yml --env-file .env --env-file .env.gimmich)
-info "Starting (the first time downloads about 3 GB and builds the Studio: 15-30 minutes)..."
-"${COMPOSE[@]}" up -d --build --remove-orphans
+if [ -n "$EXISTING_DIR" ]; then
+  # your own Immich files, exactly as they are, plus the Studio on top
+  COMPOSE=(docker compose -p "$EXISTING_PROJECT")
+  IFS=',' read -r -a files <<<"$EXISTING_FILES"
+  for f in "${files[@]}"; do COMPOSE+=(-f "$f"); done
+  COMPOSE+=(-f immich-studio/docker-compose.studio.yml)
+  [ -f .env ] && COMPOSE+=(--env-file .env)
+  COMPOSE+=(--env-file .env.gimmich)
+  info "Starting (the first time builds the Studio: 15-30 minutes)..."
+  "${COMPOSE[@]}" up -d --build
+else
+  COMPOSE=(docker compose -f docker-compose.yml -f immich-studio/docker-compose.studio.yml --env-file .env --env-file .env.gimmich)
+  info "Starting (the first time downloads about 3 GB and builds the Studio: 15-30 minutes)..."
+  "${COMPOSE[@]}" up -d --build --remove-orphans
+fi
 for _ in $(seq 1 200); do curl -fs "http://localhost:$GIMMICH_PORT/api/server/ping" >/dev/null 2>&1 && break; sleep 3; done
 curl -fs "http://localhost:$GIMMICH_PORT/api/server/ping" >/dev/null 2>&1 || fail "Gimmich didn't start. See: cd $GIMMICH_DIR && ${COMPOSE[*]} logs"
 ok "Gimmich is running at http://localhost:$GIMMICH_PORT"
