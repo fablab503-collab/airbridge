@@ -105,6 +105,18 @@ impl Immich {
         Ok(())
     }
 
+    /// Every photo/video id in an album, in Immich's order.
+    pub async fn album_asset_ids(&self, album_id: &str) -> Result<Vec<String>> {
+        let mut ids = vec![];
+        let mut page = Some(1);
+        while let Some(p) = page {
+            let (items, next) = self.assets(p, 500, json!({ "albumIds": [album_id] })).await?;
+            ids.extend(items.iter().filter_map(|a| a["id"].as_str().map(str::to_string)));
+            page = next;
+        }
+        Ok(ids)
+    }
+
     pub async fn albums(&self) -> Result<Vec<Value>> {
         Ok(self.get_json("/albums").await?.as_array().cloned().unwrap_or_default())
     }

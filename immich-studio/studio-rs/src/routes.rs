@@ -11,7 +11,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::{brand, immich::{status_of, Immich}, proxy, State as AppState};
+use crate::{brand, formats, immich::{status_of, Immich}, proxy, tools, State as AppState};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -29,11 +29,16 @@ pub fn router() -> Router<AppState> {
         .route("/api/connect", get(connect))
         .route("/api/downloads/{kind}/{name}", get(download))
         .route("/api/camera/upload", post(camera_upload))
+        .route("/api/import", post(tools::import))
+        .route("/api/edit/{id}", post(tools::edit))
+        .route("/api/graphite-return/{id}", post(tools::graphite_return))
+        .route("/api/print/{id}", get(tools::print_check).post(tools::print_make))
+        .route("/api/book", post(tools::book))
         .route("/api/{*rest}", any(proxy::to_python))
 }
 
 // ------------------------------------------------------------------ errors ---
-pub struct ApiError(StatusCode, String);
+pub struct ApiError(pub StatusCode, pub String);
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
@@ -48,15 +53,15 @@ impl From<anyhow::Error> for ApiError {
     }
 }
 
-fn err(code: StatusCode, msg: &str) -> ApiError {
+pub fn err(code: StatusCode, msg: &str) -> ApiError {
     ApiError(code, msg.into())
 }
 
-type ApiResult<T> = Result<T, ApiError>;
+pub type ApiResult<T> = Result<T, ApiError>;
 
 // ------------------------------------------------------------------- login ---
 /// Act as the visitor: their Immich login cookie (same address as Immich), or an API key.
-fn immich_for(st: &AppState, headers: &HeaderMap) -> ApiResult<Immich> {
+pub fn immich_for(st: &AppState, headers: &HeaderMap) -> ApiResult<Immich> {
     let cookie = headers.get_all(header::COOKIE).iter().filter_map(|v| v.to_str().ok())
         .flat_map(|c| c.split(';')).map(str::trim)
         .find_map(|c| c.strip_prefix("immich_access_token=")).map(str::to_string);
@@ -115,17 +120,18 @@ async fn thumb(State(st): State<AppState>, h: HeaderMap, Path(id): Path<String>,
     Ok(([(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, "private, max-age=3600")], data).into_response())
 }
 
-async fn original(State(st): State<AppState>, Path(id): Path<String>, req: Request) -> ApiResult<Response> {
-    let im = immich_for(&st, req.headers())?;
+async fn original(State(st): State<AppState>, h: HeaderMap, Path(id): Path<String>) -> ApiResult<Response> {
+    let im = immich_for(&st, &h)?;
     let a = im.asset(&id).await?;
-    let name = a["originalFileName"].as_str().unwrap_or("").to_lowercase();
-    let simple = [".jpg", ".jpeg", ".png", ".webp"].iter().any(|e| name.ends_with(e));
-    if !simple {
-        // other formats (RAW, HEIC, PSD ...) are converted by the Python Studio until ported
-        return Ok(proxy::to_python(State(st), req).await);
+    let name = a["originalFileName"].as_str().unwrap_or("").to_string();
+    let data = im.original(&id).await?;
+    if ["jpg", "jpeg", "png", "webp"].contains(&formats::ext_of(&name).as_str()) {
+        let media = a["originalMimeType"].as_str().unwrap_or("image/jpeg").to_string();
+        return Ok(([(header::CONTENT_TYPE, media)], data).into_response());
     }
-    let media = a["originalMimeType"].as_str().unwrap_or("image/jpeg").to_string();
-    Ok(([(header::CONTENT_TYPE, media)], im.original(&id).await?).into_response())
+    // RAW, HEIC, PSD, JPEG XL ... become a full-size JPEG the browser can show
+    let jpeg = tools::blocking(move || formats::to_jpeg(&formats::open_any(&data, &name)?, None, 95)).await?;
+    Ok(([(header::CONTENT_TYPE, "image/jpeg")], jpeg).into_response())
 }
 
 #[derive(Deserialize)]
