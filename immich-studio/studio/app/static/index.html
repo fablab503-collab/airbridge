@@ -107,7 +107,7 @@ pre { white-space: pre-wrap; font-size: 13px; margin: 0; }
             <h2>Faces</h2>
             <div class="row">
               <button class="btn" id="find-faces">Find faces</button>
-              <label class="row muted"><input type="checkbox" id="show-mesh" checked> show 478-point face mesh</label>
+              <label class="row muted"><input type="checkbox" id="show-mesh" checked> show face points (478 mesh + 106 outline = 584)</label>
             </div>
             <div id="faces"></div>
           </div>
@@ -335,9 +335,10 @@ function drawFaces(d, list = true) {
     g.strokeStyle = "#7cf29a"; g.lineWidth = 2; g.strokeRect(x1 * sx, y1 * sy, (x2 - x1) * sx, (y2 - y1) * sy);
     g.fillStyle = "#7cf29a"; g.font = "bold 13px system-ui"; g.fillText(`${i + 1}: ~${Math.round(f.age)}`, x1 * sx, y1 * sy - 4);
     if (f.mesh && $("#show-mesh").checked) { g.fillStyle = "rgba(255,230,90,.9)"; for (const [x, y] of f.mesh) g.fillRect(x * sx - 0.75, y * sy - 0.75, 1.5, 1.5); }
+    if (f.outline && $("#show-mesh").checked) { g.fillStyle = "rgba(90,200,255,.95)"; for (const [x, y] of f.outline) g.fillRect(x * sx - 1, y * sy - 1, 2, 2); }
   });
   if (list) $("#faces").innerHTML = d.faces.length ? `<table><tr><th>#</th><th>Age guess</th><th>Group</th><th>Face points</th><th></th></tr>` +
-    d.faces.map((f, i) => `<tr><td>${i + 1}</td><td>~${Math.round(f.age)}</td><td>${f.age_group}</td><td>${f.mesh ? f.mesh.length : "–"}</td>` +
+    d.faces.map((f, i) => `<tr><td>${i + 1}</td><td>~${Math.round(f.age)}</td><td>${f.age_group}</td><td>${f.points}</td>` +
       `<td><button class="btn" data-find="${i}">Find at any age</button></td></tr>`).join("") + "</table><div id='matches'></div>" : '<p class="muted">No faces found.</p>';
 }
 $("#faces").onclick = async (e) => {
@@ -345,11 +346,30 @@ $("#faces").onclick = async (e) => {
   $("#matches").innerHTML = '<p class="muted">Searching your library…</p>';
   try {
     const r = await post("faces/find", { asset_id: current.id, face: +i });
-    const sure = r.matches.filter((m) => m.likely_same);
-    $("#matches").innerHTML = `<p class="muted">${sure.length} photos are likely the same person (about 1 in 100 such matches is wrong). Lower ones are shown for you to check.</p><div class="grid">` +
-      r.matches.map((m) => `<div class="tile" style="${m.likely_same ? "" : "opacity:.45"}"><img src="api/thumb/${m.asset}" data-open="${m.asset}"><span class="badge">${Math.round(m.similarity * 100)}% · ~${Math.round(m.age)} y</span></div>`).join("") + "</div>";
+    const n = (lvl) => r.matches.filter((m) => m.level === lvl).length;
+    const LABEL = { confirmed: "✓ you confirmed", certain: "certain", likely: "likely", unsure: "unsure", rejected: "✗ not them" };
+    $("#matches").innerHTML = `<p class="muted"><b>${n("confirmed")}</b> confirmed by you · <b>${n("certain")}</b> certain (no mistakes in our tests) · ` +
+      `<b>${n("likely")}</b> likely (about 1 in 100 is wrong) · the rest unsure. Tap ✓ or ✗ to teach it, then “Learn from my answers”.</p>` +
+      `<div class="row"><button class="btn" id="learn">Learn from my answers</button><span id="learn-out" class="muted"></span></div><div class="grid">` +
+      r.matches.map((m) => `<div class="tile" style="${m.likely_same ? "" : "opacity:.5"}"><img src="api/thumb/${m.asset}" data-open="${m.asset}">` +
+        `<span class="badge">${LABEL[m.level]} · ${Math.round(m.similarity * 100)}% · ~${Math.round(m.age)} y</span>` +
+        `<div class="row" style="margin:4px 0 0"><button class="btn" data-a="${r.face}" data-b="${m.face}" data-same="1">✓</button>` +
+        `<button class="btn" data-a="${r.face}" data-b="${m.face}" data-same="0">✗</button></div></div>`).join("") + "</div>";
   } catch (err) { $("#matches").innerHTML = `<p class="bad">${err.message}</p>`; }
 };
+$("#faces").addEventListener("click", async (e) => {
+  const b = e.target.dataset;
+  if (b.same !== undefined) {
+    await post("faces/confirm", { a: b.a, b: b.b, same: b.same === "1" });
+    e.target.closest(".tile").querySelector(".badge").textContent = b.same === "1" ? "✓ you confirmed" : "✗ not them";
+    e.target.closest(".tile").style.opacity = b.same === "1" ? 1 : 0.35;
+  } else if (e.target.id === "learn") {
+    $("#learn-out").textContent = "Learning…";
+    try { const { job } = await post("faces/learn"); const j = await waitJob(job);
+      $("#learn-out").textContent = `Learned ${j.result.your_people} people from ${j.result.your_faces} of your faces. ${j.result.note}`; }
+    catch (err) { $("#learn-out").textContent = err.message; }
+  }
+});
 $("#v-photo").addEventListener("click", async (e) => {
   const id = e.target.dataset?.open; if (!id) return;
   const a = await fetch("../api/assets/" + id, { credentials: "include" }).then((r) => r.json());

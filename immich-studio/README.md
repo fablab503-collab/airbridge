@@ -9,7 +9,7 @@ After installing, Immich gets a **✨ Studio** button. On any photo it offers:
 |---|---|---|
 | **AI labels** | Tags each photo with environment (42 kinds of place, including prison), indoors/outdoors, light, number of people, era/decade, age group of each face, and clothing (type, colour, style). The tags become normal Immich tags, so Immich search finds them. | SigLIP2 (through Immich's own ML server), InsightFace, our trained models |
 | **Teach your own labels** | Make albums named `Train: Group/Label` (e.g. `Train: Clothing/School uniform`) with ~10 photos each, press *Train*. | scikit-learn |
-| **Faces** | Finds faces, guesses age, draws a **478-point 3D face mesh**. | InsightFace SCRFD + ArcFace, MediaPipe Face Landmarker |
+| **Faces** | Finds faces, guesses age, maps **584 points** per face (478-point 3D mesh + 106-point outline), finds the same person at any age with certain / likely / unsure levels, and learns your people from ✓ / ✗ answers. | InsightFace SCRFD + ArcFace R100 + 2d106det, MediaPipe Face Landmarker, our trained layers |
 | **Edit** | Brightness, contrast, colour, exposure, warm/cool, hue, sharpness, rotate, mirror, crop, black & white, sepia, auto-fix and **change one colour** (e.g. red shirt → blue). Save as a new photo or replace the original; delete photos. | Pillow, NumPy |
 | **Graphite** | Opens the photo in [Graphite](https://graphite.art), a full editor written in Rust (layers, drawing, text, filters). *File → Export* saves the result straight back into Immich. | Graphite (Apache-2.0) + a small patch |
 | **Any file format** | Imports RAW (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 …), HEIC, AVIF, JPEG XL, PSD, SVG, PDF, EXR, HDR, TGA, ICO, DDS, QOI, XPM … Formats Immich can't show are converted to full-quality TIFF. | LibRaw (rawpy), libheif, psd-tools, CairoSVG, PDFium, ImageMagick, ffmpeg |
@@ -71,8 +71,25 @@ All numbers come from the scripts in `eval/`, tested on photos the models never 
 
 Adding our trained "ignore ageing" layer (tested on *other* people only, 5-fold, so smaller search sets):
 antelopev2 86.0 % → **92.6 %** at 10+ years, 74.2 % → **76.4 %** at 20+ years.
-At the default "likely same person" threshold (0.36) about **1 in 100** matches is the wrong person and 87 % of
-same-person pairs are found.
+Each match gets a level:
+
+| Level | Meaning (measured on FG-NET people the model never saw) |
+|---|---|
+| **confirmed** | you ticked ✓ (or it joins people you confirmed: A = B and B = C → A = C) |
+| **certain** (score ≥ 0.72) | **0 wrong-person matches** among ~282 000 wrong pairs in 3 test rounds; about 25 % of same-person pairs reach it |
+| **likely** (≥ 0.36) | about 1 wrong match in 100; 87 % of same-person pairs reach it |
+| unsure | check yourself |
+
+**Teach it your people** (✓ / ✗ on matches, then *Learn from my answers*) — simulated on unseen FG-NET people,
+tested only on photos that were *not* confirmed (`eval/learn_from_confirmations_eval.py`):
+
+| You confirm per person | Found at 20+ years apart | Same-person pairs reaching "certain" | Wrong person reaching "certain" |
+|---|---|---|---|
+| nothing | 74–79 % | ~25 % | 0 |
+| 3 photos | **88.8 %** | 43 % | **0 of 53 647** |
+| 6 photos | **93.0 %** | 48 % | **0 of 24 370** |
+
+**Face points:** MediaPipe's 478-point 3D mesh + InsightFace's 106-point outline = **584 points per face**.
 
 **Everything else** — `studio/tests/test_formats.py`: 32 of 32 sample files (24 formats + RAW from Canon CR2/CR3,
 Nikon, Sony, Fujifilm, Panasonic, Olympus, iPhone DNG). `studio/tests/test_api.py`: 16 of 16 end-to-end checks
@@ -80,8 +97,11 @@ Nikon, Sony, Fujifilm, Panasonic, Olympus, iPhone DNG). `studio/tests/test_api.p
 
 ## Honest limits
 
-* **No face system recognises people "100%"**, least of all across many years (a baby photo vs. the same person at 40).
-  Large public tests show the best systems still make mistakes when the age gap is big. Studio shows how sure it is instead of pretending.
+* **No face system recognises every photo "100%"**, least of all across many years (a baby photo vs. the same person at 40).
+  What Studio offers instead: a **certain** level that made no mistakes in our tests (but covers only part of the photos),
+  and your own ✓ / ✗ answers, which are always right and make it learn your people. "0 mistakes in our tests" is not a
+  promise of 0 mistakes on every future photo.
+* "Learn from my answers" updates one shared model for the whole Studio server (all Immich users on it).
 * A grid of face points (the 478-point mesh) is great for drawing and measuring a face, but on its own it identifies people
   much worse than ArcFace "face fingerprints" — see the table. Studio uses the mesh for display and ArcFace for identity.
 * The "ignore ageing" layer learned from only 82 people (FG-NET). It helped on held-out people, but may help less

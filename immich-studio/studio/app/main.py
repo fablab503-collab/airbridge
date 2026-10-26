@@ -198,7 +198,7 @@ def analyze(im: Immich, asset_id: str, write: bool = True) -> dict:
     # Without camera details Immich falls back to the file date, which is not when the photo was taken
     year = int(taken[:4]) if taken and (exif.get("make") or exif.get("model")) else None
     face_out = [{"box": [round(float(v)) for v in f.box], "age": round(f.age, 1), "age_group": age_group(f.age),
-                 "sex": f.sex, "mesh_points": 0 if f.mesh is None else len(f.mesh)} for f in faces]
+                 "sex": f.sex, "mesh_points": face_point_count(f)} for f in faces]
     result = {"asset": asset_id, "labels": {g: [(n, round(s, 3)) for n, s in v] for g, v in labels.items()},
               "faces": face_out, "year_from_camera": year}
     if write:
@@ -286,12 +286,44 @@ def faces(asset_id: str, request: Request):
     return {"width": img.width, "height": img.height,
             "faces": [{"box": [float(v) for v in f.box], "age": round(f.age, 1), "age_group": age_group(f.age),
                        "sex": f.sex, "score": round(f.score, 3),
-                       "mesh": None if f.mesh is None else np.round(f.mesh[:, :2], 1).tolist()} for f in found]}
+                       "mesh": None if f.mesh is None else np.round(f.mesh[:, :2], 1).tolist(),
+                       "outline": np.round(f.extra["points106"], 1).tolist() if "points106" in f.extra else None,
+                       "points": face_point_count(f)} for f in found]}
 
 
-def _face_index_path(im: Immich) -> str:
+def face_point_count(f) -> int:
+    return (0 if f.mesh is None else len(f.mesh)) + len(f.extra.get("points106", []))
+
+
+def _face_index_path(im: Immich, kind: str = "faces", ext: str = "npz") -> str:
     uid = im._req("GET", "/users/me").json()["id"]  # one index per Immich user
-    return os.path.join(DATA_DIR, f"faces-{uid}.npz")
+    return os.path.join(DATA_DIR, f"{kind}-{uid}.{ext}")
+
+
+# Similarity levels, measured on FG-NET people the model never saw (eval/README):
+CERTAIN = 0.72  # above the highest wrong-person score in ~282 000 wrong pairs: 0 mistakes seen
+LIKELY = 0.36   # about 1 wrong match in 100
+
+
+def _confirmations(im: Immich) -> dict:
+    path = _face_index_path(im, "confirmed", "json")
+    return json.load(open(path)) if os.path.exists(path) else {"same": [], "different": []}
+
+
+def _same_groups(pairs: list[list[str]]) -> dict[str, str]:
+    """Join confirmed pairs into people: if A=B and B=C then A=C."""
+    parent: dict[str, str] = {}
+
+    def root(k):
+        parent.setdefault(k, k)
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    for a, b in pairs:
+        parent[root(a)] = root(b)
+    return {k: root(k) for k in parent}
 
 
 @app.post("/api/faces/index")
@@ -302,17 +334,19 @@ def index_faces(request: Request):
 
     def work(job):
         photos = im.all_assets(type="IMAGE")
-        rows, embs = [], []
+        rows, embs, raws = [], [], []
         for i, a in enumerate(photos):
             try:
                 img, _ = _load(im, a["id"])
-                for f in lazy("faces").analyze(cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)):
-                    rows.append((a["id"], *[float(v) for v in f.box], f.age))
+                for n, f in enumerate(lazy("faces").analyze(cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR))):
+                    rows.append((f"{a['id']}:{n}", f.age))
                     embs.append(f.embedding)
+                    raws.append(f.extra["raw_embedding"])
             except Exception as e:
                 print("face index failed", a["id"], e)
             job["progress"] = round(100 * (i + 1) / len(photos))
-        np.savez_compressed(path, rows=np.array(rows, dtype=object), embs=np.array(embs, dtype=np.float32))
+        np.savez_compressed(path, rows=np.array(rows, dtype=object), embs=np.array(embs, dtype=np.float32),
+                            raws=np.array(raws, dtype=np.float32))
         return {"photos": len(photos), "faces": len(rows)}
 
     return {"job": run_job("index-faces", work)}
@@ -330,16 +364,72 @@ async def find_person(request: Request):
     img, _ = _load(im, body["asset_id"])
     faces = lazy("faces").analyze(cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR))
     face = faces[int(body.get("face", 0))]
+    me_key = f"{body['asset_id']}:{int(body.get('face', 0))}"
+    conf = _confirmations(im)
+    groups = _same_groups(conf["same"])
+    rejected = {frozenset(p) for p in conf["different"]}
     sims = idx["embs"] @ face.embedding
-    best: dict[str, tuple[float, float]] = {}
-    for (aid, *_box, age), s in zip(idx["rows"], sims):
-        if aid != body["asset_id"] and s > best.get(aid, (-1, 0))[0]:
-            best[aid] = (float(s), float(age))
+    best: dict[str, tuple[float, str, float]] = {}
+    for (key, age), s in zip(idx["rows"], sims):
+        aid = key.split(":")[0]
+        if aid != body["asset_id"] and s > best.get(aid, (-1, "", 0))[0]:
+            best[aid] = (float(s), key, float(age))
     ranked = sorted(best.items(), key=lambda kv: -kv[1][0])[: int(body.get("limit", 30))]
-    return {"age_here": round(face.age, 1),
-            "matches": [{"asset": aid, "similarity": round(s, 3), "age": round(age, 1),
-                         # 0.36 = 1% wrong-person matches on held-out FG-NET people (any age gap)
-                         "likely_same": s >= float(body.get("threshold", 0.36))} for aid, (s, age) in ranked]}
+
+    def level(key: str, s: float) -> str:
+        if me_key in groups and groups.get(key) == groups[me_key]:
+            return "confirmed"  # you said so
+        if frozenset((me_key, key)) in rejected:
+            return "rejected"
+        return "certain" if s >= CERTAIN else "likely" if s >= LIKELY else "unsure"
+
+    out = [{"asset": aid, "face": key, "similarity": round(s, 3), "age": round(age, 1), "level": level(key, s)}
+           for aid, (s, key, age) in ranked]
+    for m in out:
+        m["likely_same"] = m["level"] in ("confirmed", "certain", "likely")
+    return {"age_here": round(face.age, 1), "face": me_key, "matches": out}
+
+
+@app.post("/api/faces/confirm")
+async def confirm_face(request: Request):
+    """Remember your answer: are these two faces the same person? ({"a": key, "b": key, "same": bool})"""
+    body = await request.json()
+    im = immich_for(request)
+    conf = _confirmations(im)
+    pair = sorted([body["a"], body["b"]])
+    for k in ("same", "different"):
+        conf[k] = [p for p in conf[k] if sorted(p) != pair]
+    conf["same" if body["same"] else "different"].append(pair)
+    json.dump(conf, open(_face_index_path(im, "confirmed", "json"), "w"))
+    return {"same": len(conf["same"]), "different": len(conf["different"])}
+
+
+@app.post("/api/faces/learn")
+def learn_faces(request: Request):
+    """Retrain the age-ignoring layer on FG-NET plus the people you confirmed."""
+    im = immich_for(request)
+    from sklearn.decomposition import PCA
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+    from sklearn.pipeline import make_pipeline
+    import pickle
+
+    def work(job):
+        idx = np.load(_face_index_path(im), allow_pickle=True)
+        keys = [k for k, _ in idx["rows"]]
+        groups = _same_groups(_confirmations(im)["same"])
+        mine = [(i, groups[k]) for i, k in enumerate(keys) if k in groups]
+        base = np.load(os.path.join(os.environ.get("STUDIO_TRAINED_DIR", "/srv/trained"), "fgnet_antelopev2.npz"))
+        X = np.vstack([base["embs"], idx["raws"][[i for i, _ in mine]]]) if mine else base["embs"]
+        y = list(base["people"].astype(str)) + [f"you:{g}" for _, g in mine]
+        model = make_pipeline(PCA(n_components=200), LinearDiscriminantAnalysis(solver="eigen", shrinkage=0.3))
+        model.fit(X, y)
+        pickle.dump(model, open(os.path.join(os.environ.get("STUDIO_MODEL_DIR", "/models"),
+                                             "age_invariant_antelopev2.pkl"), "wb"))
+        lazy("faces").age_invariant.model = model
+        return {"your_faces": len(mine), "your_people": len({g for _, g in mine}),
+                "note": "Run 'Index all faces' again so the whole library uses the new layer."}
+
+    return {"job": run_job("learn-faces", work)}
 
 
 # ---------------------------------------------------------------- editing ---

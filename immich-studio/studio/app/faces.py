@@ -174,6 +174,26 @@ class AgeHead:
         return np.clip(self.model.predict(embs), 0, 100)
 
 
+class Landmarks106:
+    """InsightFace 2d106det: 106 outline points (jaw, brows, eyes, nose, lips). Together with the
+    478-point mesh this gives 584 points per face."""
+
+    def __init__(self, path: str | None = None):
+        self.sess = _session(path or os.path.join(MODEL_DIR, "buffalo_l", "2d106det.onnx"))
+        self.input_name = self.sess.get_inputs()[0].name
+
+    def points(self, img_bgr: np.ndarray, box: np.ndarray) -> np.ndarray:
+        x1, y1, x2, y2 = box
+        cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+        s = 192 / (max(x2 - x1, y2 - y1) * 1.5)
+        m = np.array([[s, 0, 96 - cx * s], [0, s, 96 - cy * s]], dtype=np.float32)
+        crop = cv2.warpAffine(img_bgr, m, (192, 192), borderValue=0)
+        blob = cv2.dnn.blobFromImage(crop, 1.0, (192, 192), (0, 0, 0), swapRB=True)
+        out = self.sess.run(None, {self.input_name: blob})[0].reshape(-1, 2)
+        pts = (out + 1) * 96  # model gives -1..1 inside the 192px crop
+        return np.stack([(pts[:, 0] - m[0, 2]) / s, (pts[:, 1] - m[1, 2]) / s], axis=1)
+
+
 class FaceMesh:
     """MediaPipe Face Landmarker: 478 points (468 face mesh + 10 iris)."""
 
@@ -219,19 +239,22 @@ class FacePipeline:
         self.genderage = GenderAge()
         self.age_head = AgeHead()
         self.mesh = FaceMesh() if with_mesh else None
+        self.outline = Landmarks106() if with_mesh else None
 
     def analyze(self, img_bgr: np.ndarray, min_score: float = 0.6) -> list[Face]:
         faces = [f for f in self.detector.detect(img_bgr) if f.score >= min_score]
         if not faces:
             return faces
         crops = [align(img_bgr, f.kps) for f in faces]
-        embs = self.age_invariant(self.recognizer.embed(crops))
+        raw = self.recognizer.embed(crops)
+        embs = self.age_invariant(raw)
         try:
             ages = self.age_head.predict(crops)
         except Exception:  # ML server unreachable: fall back to InsightFace's guess
             ages = None
         for i, f in enumerate(faces):
             f.embedding = embs[i]
+            f.extra["raw_embedding"] = raw[i]  # kept so the layer can be retrained on your confirmations
             ga_age, f.sex = self.genderage.predict(img_bgr, f.box)
             f.age = float(ages[i]) if ages is not None else ga_age
             f.extra["age_insightface"] = ga_age
@@ -243,4 +266,7 @@ class FacePipeline:
                     if f.box[0] <= nx <= f.box[2] and f.box[1] <= ny <= f.box[3]:
                         f.mesh = m
                         break
+        if self.outline is not None:
+            for f in faces:
+                f.extra["points106"] = self.outline.points(img_bgr, f.box)
         return faces
