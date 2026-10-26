@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Studio Camera">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Studio Camera</title>
+<style>
+:root { --bg: #000; --text: #fff; --muted: rgba(255,255,255,.7); --chip: rgba(0,0,0,.45); --accent: #aab4ff; --bad: #ff8a80; --good: #6fd39b; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, -apple-system, sans-serif; overflow: hidden; }
+#view { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #111; }
+#view.mirror { transform: scaleX(-1); }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.top { position: fixed; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top) + 10px) 14px 10px; display: flex; gap: 8px; align-items: center; }
+.chip { background: var(--chip); border: 0; color: var(--text); border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.chip.on { background: var(--accent); color: #111; }
+#status { margin-left: auto; }
+.bottom { position: fixed; left: 0; right: 0; bottom: 0; padding: 14px 24px calc(env(safe-area-inset-bottom) + 22px); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+#last { grid-column: 1; width: 54px; height: 54px; border-radius: 10px; border: 2px solid #fff; object-fit: cover; background: #222; justify-self: start; }
+#shutter { grid-column: 2; width: 78px; height: 78px; border-radius: 50%; border: 5px solid #fff; background: #fff; box-shadow: inset 0 0 0 3px #000; cursor: pointer; }
+#shutter.video { background: #e53935; }
+#shutter.rec { border-radius: 18px; transform: scale(.8); }
+#shutter:active { transform: scale(.94); }
+#flip { grid-column: 3; justify-self: end; width: 54px; height: 54px; border-radius: 50%; border: 0; background: var(--chip); color: #fff; font-size: 22px; }
+.modes { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 122px); display: flex; justify-content: center; gap: 6px; }
+#zoom { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 166px); width: min(70vw, 320px); accent-color: #fff; }
+#msg { position: fixed; left: 16px; right: 16px; top: 40%; text-align: center; font-size: 16px; }
+#msg .box { display: inline-block; background: rgba(0,0,0,.7); padding: 14px 18px; border-radius: 12px; max-width: 420px; }
+#msg a { color: var(--accent); }
+.hide { display: none !important; }
+</style>
+</head>
+<body>
+<video id="view" playsinline muted autoplay></video>
+<div id="flash"></div>
+<div class="top">
+  <button class="chip" id="torch" title="Light">⚡ Off</button>
+  <button class="chip" id="hd" title="Quality">Max quality</button>
+  <span class="chip" id="status">Starting…</span>
+</div>
+<input id="zoom" type="range" min="1" max="1" step="0.1" value="1" class="hide" aria-label="Zoom">
+<div class="modes">
+  <button class="chip on" data-mode="photo">Photo</button>
+  <button class="chip" data-mode="video">Video</button>
+</div>
+<div class="bottom">
+  <img id="last" alt="" class="hide">
+  <button id="shutter" aria-label="Take photo"></button>
+  <button id="flip" aria-label="Switch camera">⟲</button>
+</div>
+<div id="msg" class="hide"><div class="box"></div></div>
+<canvas id="grab" class="hide"></canvas>
+<script>
+// Studio Camera: photos and videos go straight to Immich on your computer.
+// Nothing is written to the phone's gallery or files: pictures live in memory only
+// until the upload succeeds, then they are dropped.
+const $ = (s) => document.querySelector(s);
+const view = $("#view");
+let stream = null, track = null, facing = "environment", mode = "photo", torchOn = false, maxQuality = true;
+let recorder = null, chunks = [];
+const pending = []; // {blob, name, taken} waiting for upload (memory only)
+let sent = 0, failed = 0, uploading = false, me = null;
+
+function say(html) { $("#msg .box").innerHTML = html; $("#msg").classList.toggle("hide", !html); }
+function status() {
+  const p = pending.length;
+  $("#status").textContent = !me ? "Not logged in" : p ? `Uploading ${p}…` : sent ? `✓ ${sent} saved to Immich` : `Ready · ${me}`;
+}
+
+async function login() {
+  try {
+    const r = await fetch("../api/me", { credentials: "include" });
+    if (!r.ok) throw new Error();
+    me = (await r.json()).name;
+  } catch {
+    me = null;
+    say('Log in to Immich first.<br><br><a href="../../auth/login?continue=' + encodeURIComponent(location.pathname) + '">Open Immich login</a>');
+  }
+  status();
+  return !!me;
+}
+
+let ready = Promise.resolve(); // resolves when the current camera is live
+
+function start() {
+  ready = startCamera();
+  return ready;
+}
+
+async function startCamera() {
+  document.body.dataset.ready = "";
+  if (!navigator.mediaDevices?.getUserMedia) {
+    say("This browser can't use the camera here.<br>The page must be opened over <b>https://</b> (or on the computer itself).");
+    return;
+  }
+  stream?.getTracks().forEach((t) => t.stop());
+  const size = maxQuality ? { width: { ideal: 4096 }, height: { ideal: 3072 } } : { width: { ideal: 1920 }, height: { ideal: 1080 } };
+  try {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, ...size }, audio: mode === "video" });
+    } catch (e) {
+      if (e.name !== "OverconstrainedError") throw e;
+      // this camera can't do the wished size/side: ask for any camera at all
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: mode === "video" });
+    }
+  } catch (e) {
+    const why = {
+      NotAllowedError: "Camera access was refused.<br>Allow the camera for this site (browser settings) and reload.",
+      NotFoundError: "No camera found on this device.",
+      OverconstrainedError: "No camera found on this device.",
+      NotReadableError: "The camera is busy.<br>Close the other app that uses it and reload.",
+    }[e.name] || `Camera not available (${e.name}).<br>Allow camera access for this site and reload.`;
+    say(why);
+    return;
+  }
+  track = stream.getVideoTracks()[0];
+  view.srcObject = stream;
+  await view.play().catch(() => {});
+  if (!view.videoWidth) await new Promise((r) => view.addEventListener("loadedmetadata", r, { once: true }));
+  document.body.dataset.ready = "1";
+  view.classList.toggle("mirror", facing === "user");
+  const caps = track.getCapabilities?.() || {};
+  $("#torch").classList.toggle("hide", !caps.torch);
+  if (caps.zoom) {
+    Object.assign($("#zoom"), { min: caps.zoom.min, max: caps.zoom.max, step: caps.zoom.step || 0.1, value: track.getSettings().zoom || caps.zoom.min });
+  }
+  $("#zoom").classList.toggle("hide", !caps.zoom);
+  if (me) say("");
+}
+
+function flash() { $("#flash").style.opacity = 0.8; setTimeout(() => ($("#flash").style.opacity = 0), 80); }
+
+async function grabPhoto() {
+  // Full-resolution still where the browser supports it (Android Chrome), else a frame of the live view.
+  if ("ImageCapture" in window && facing === "environment") {
+    try { return await new ImageCapture(track).takePhoto(); } catch { /* fall back to a video frame */ }
+  }
+  const c = $("#grab");
+  c.width = view.videoWidth; c.height = view.videoHeight;
+  const g = c.getContext("2d");
+  if (facing === "user") { g.translate(c.width, 0); g.scale(-1, 1); }
+  g.drawImage(view, 0, 0);
+  return await new Promise((res) => c.toBlob(res, "image/jpeg", 0.95));
+}
+
+function stamp() { return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19); }
+
+async function shoot() {
+  if (!me && !(await login())) return;
+  if (!recorder) await ready; // just switched camera or mode: wait until the new camera is live
+  if (mode === "video") return toggleVideo();
+  flash();
+  const blob = await grabPhoto();
+  if (!blob) return;
+  queue(blob, `IMG_${stamp()}.jpg`);
+}
+
+function note(text) {
+  $("#status").textContent = text;
+  setTimeout(status, 4000);
+}
+
+function toggleVideo() {
+  if (recorder) { if (recorder.state === "recording") recorder.requestData(); recorder.stop(); return; }
+  const type = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((t) => MediaRecorder.isTypeSupported?.(t)) || "";
+  chunks = [];
+  recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    const ext = (recorder.mimeType || type).includes("mp4") ? "mp4" : "webm";
+    const blob = new Blob(chunks, { type: recorder.mimeType });
+    if (blob.size) queue(blob, `VID_${stamp()}.${ext}`);
+    else note("The video came out empty - please record again.");
+    chunks = []; recorder = null; $("#shutter").classList.remove("rec");
+  };
+  recorder.start(500);
+  $("#shutter").classList.add("rec");
+}
+
+function queue(blob, name) {
+  pending.push({ blob, name, taken: new Date().toISOString() });
+  const url = URL.createObjectURL(blob);
+  if (blob.type.startsWith("image")) { $("#last").src = url; $("#last").classList.remove("hide"); }
+  status();
+  upload();
+}
+
+async function upload() {
+  if (uploading) return;
+  uploading = true;
+  while (pending.length) {
+    const item = pending[0];
+    const fd = new FormData();
+    fd.append("file", item.blob, item.name);
+    fd.append("taken", item.taken);
+    try {
+      const r = await fetch("../api/camera/upload", { method: "POST", body: fd, credentials: "include" });
+      if (r.status === 401) { me = null; await login(); break; }
+      if (r.status >= 400 && r.status < 500) { // the server refused this file: retrying won't help
+        pending.shift(); failed++;
+        note(`Not saved: ${item.name} (${r.status})`);
+        continue;
+      }
+      if (!r.ok) throw new Error(r.status);
+      const res = await r.json();
+      pending.shift(); sent++;
+      $("#last").dataset.asset = res.asset;
+      window.dispatchEvent(new CustomEvent("studio-uploaded", { detail: res }));
+    } catch {
+      failed++;
+      status();
+      await new Promise((r) => setTimeout(r, 4000)); // offline or computer asleep: try again
+      continue;
+    }
+    status();
+  }
+  uploading = false;
+  status();
+}
+
+$("#shutter").onclick = shoot;
+document.addEventListener("keydown", (e) => { if (e.code === "Space" || e.code === "VolumeUp") shoot(); });
+$("#flip").onclick = () => { facing = facing === "environment" ? "user" : "environment"; start(); };
+$("#torch").onclick = async () => {
+  torchOn = !torchOn;
+  try { await track.applyConstraints({ advanced: [{ torch: torchOn }] }); } catch { torchOn = false; }
+  $("#torch").textContent = torchOn ? "⚡ On" : "⚡ Off"; $("#torch").classList.toggle("on", torchOn);
+};
+$("#hd").onclick = () => { maxQuality = !maxQuality; $("#hd").textContent = maxQuality ? "Max quality" : "Fast"; start(); };
+$("#zoom").oninput = (e) => track?.applyConstraints({ advanced: [{ zoom: +e.target.value }] }).catch(() => {});
+for (const b of document.querySelectorAll("[data-mode]")) b.onclick = () => {
+  if (recorder) return;
+  mode = b.dataset.mode;
+  for (const x of document.querySelectorAll("[data-mode]")) x.classList.toggle("on", x === b);
+  $("#shutter").classList.toggle("video", mode === "video");
+  $("#shutter").setAttribute("aria-label", mode === "video" ? "Record video" : "Take photo");
+  start();
+};
+$("#last").onclick = () => { const id = $("#last").dataset.asset; if (id) location.href = "../../photos/" + id; };
+window.addEventListener("beforeunload", (e) => { if (pending.length) { e.preventDefault(); e.returnValue = ""; } });
+window.addEventListener("online", upload);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+(async () => { await login(); await start(); status(); })();
+</script>
+</body>
+</html>

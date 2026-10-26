@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "The local setup page may save the server address and open it. Your Gimmich server itself gets no access to the computer.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

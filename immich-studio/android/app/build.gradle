@@ -1,0 +1,39 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "app.gimmich.camera"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "app.gimmich.camera"
+        minSdk 26
+        targetSdk 35
+        versionCode 2
+        versionName "1.1"
+    }
+
+    signingConfigs {
+        // Personal sideload key (kept in this repo so later versions install over earlier ones).
+        // Make your own before publishing anywhere: see android/README.md.
+        gimmich {
+            storeFile file("gimmich.keystore")
+            storePassword "gimmich-camera"
+            keyAlias "gimmich"
+            keyPassword "gimmich-camera"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.gimmich
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

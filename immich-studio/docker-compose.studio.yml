@@ -1,0 +1,58 @@
+# Immich Studio add-on. Use together with Immich's own docker-compose.yml:
+#
+#   (put this immich-studio folder inside your immich-app folder, next to docker-compose.yml)
+#   docker compose -f docker-compose.yml -f immich-studio/docker-compose.studio.yml up -d --build
+#
+# Immich stays at http://<your-computer>:2283 ; Studio appears inside it (✨ Studio button)
+# and at http://<your-computer>:2283/studio/
+name: immich
+
+services:
+  immich-server:
+    # The gateway below now answers on port 2283 and passes Immich traffic through.
+    ports: !reset []
+
+  immich-studio:
+    container_name: immich_studio
+    # One Rust program. The first build compiles it (about 10-20 minutes); later starts are instant.
+    build:
+      context: ./immich-studio/studio
+      args:
+        BUILD_IMAGE: ${STUDIO_BUILD_IMAGE:-rust:1-trixie}
+        RUNTIME_IMAGE: ${STUDIO_RUNTIME_IMAGE:-debian:trixie-slim}
+    volumes:
+      - studio-models:/models
+      - studio-data:/data
+      - ./immich-studio/graphite/dist:/graphite:ro
+      # apps offered on the "Connect a device" page
+      - ./immich-studio/android/release:/downloads/android:ro
+      - ./immich-studio/desktop/release:/downloads/desktop:ro
+    environment:
+      IMMICH_URL: http://immich-server:2283
+      IMMICH_ML_URL: http://immich-machine-learning:3003
+      # Bigger = better labels but slower. Immich downloads it on first use.
+      STUDIO_CLIP_MODEL: ViT-B-16-SigLIP2__webli
+      # Whisper size: tiny / base / small / medium (bigger = better + slower)
+      STUDIO_WHISPER_MODEL: base
+      # the address your phone and laptop use (set by the installer, e.g. https://imac.tail1234.ts.net)
+      GIMMICH_PUBLIC_URL: ${GIMMICH_PUBLIC_URL:-}
+    depends_on:
+      - immich-server
+      - immich-machine-learning
+    restart: always
+
+  immich-gateway:
+    container_name: immich_gateway
+    image: nginx:1.29-alpine
+    ports:
+      - '${GIMMICH_PORT:-2283}:2283'
+    volumes:
+      - ./immich-studio/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - immich-server
+      - immich-studio
+    restart: always
+
+volumes:
+  studio-models:
+  studio-data:
