@@ -14,6 +14,7 @@ mod immich;
 mod jobs;
 mod labels;
 mod learn;
+mod mosaic;
 mod printing;
 mod routes;
 mod tools;

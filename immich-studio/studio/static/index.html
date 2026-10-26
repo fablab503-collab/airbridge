@@ -140,6 +140,23 @@ pre { white-space: pre-wrap; font-size: 13px; margin: 0; }
             </div>
           </div>
           <div class="card">
+            <h2>Photo mosaic (big puzzle)</h2>
+            <p class="muted">Rebuilds this photo out of hundreds of your other photos as small tiles. Step back and you see this photo; come close and you see all the others.</p>
+            <div class="row">
+              <select id="m-style">
+                <option value="classic">Classic: photos as they are</option>
+                <option value="blend" selected>Blend: tiles tinted to the picture</option>
+                <option value="puzzle">Puzzle: jigsaw pieces</option>
+                <option value="bubbles">Bubbles: round tiles</option>
+              </select>
+              <select id="m-album"><option value="">Tiles from: all my photos</option></select>
+            </div>
+            <div class="row"><label class="muted">Tiles across <input type="range" id="m-cols" min="20" max="150" value="60"> <span id="m-cols-v">60</span></label></div>
+            <div class="row"><button class="btn primary" id="m-go">Make mosaic</button></div>
+            <div class="progress hide" id="m-prog"><div></div></div>
+            <div id="m-out" class="muted"></div>
+          </div>
+          <div class="card">
             <h2>More tools</h2>
             <div class="row">
               <a class="btn" id="open-graphite" target="_blank">Open in Graphite (Rust editor)</a>
@@ -465,6 +482,20 @@ $("#transcribe").onclick = async () => {
   $("#transcribe").disabled = false;
 };
 
+// mosaic
+$("#m-cols").oninput = () => { $("#m-cols-v").textContent = $("#m-cols").value; };
+$("#m-go").onclick = async () => {
+  $("#m-go").disabled = true; $("#m-out").textContent = "Collecting your photos and placing every tile…";
+  try {
+    const { job } = await post("mosaic", { asset_id: current.id, album_id: $("#m-album").value, style: $("#m-style").value, tiles_across: +$("#m-cols").value });
+    const j = await waitJob(job, $("#m-prog"));
+    const r = j.result;
+    $("#m-out").innerHTML = `Made from ${r.photos_used} different photos (${r.tiles_across} × ${r.tiles_down} tiles, ${r.size[0]} × ${r.size[1]} pixels), saved in Immich next to the original. ` +
+      `<a href="${j.file_url}">Download</a><br><a href="${j.file_url}" target="_blank"><img src="${j.file_url}" alt="mosaic" style="max-width:100%;margin-top:8px;border-radius:8px"></a>`;
+  } catch (e) { $("#m-out").innerHTML = `<span class="bad">${e.message}</span>`; }
+  $("#m-go").disabled = false;
+};
+
 // book
 $("#b-go").onclick = async () => {
   $("#b-go").disabled = true; $("#b-out").textContent = "Building the book…";
@@ -532,7 +563,7 @@ if (window.top !== window) { // opened inside Immich's Studio panel, which has i
     const me = await api("me"); $("#who").textContent = me.name + " · " + me.email;
   } catch { $("#who").innerHTML = '<span class="bad">Not logged in to Immich — <a href="../auth/login">log in</a></span>'; return; }
   const albums = await api("albums");
-  for (const a of albums) { $("#f-album").add(new Option(`${a.name} (${a.count})`, a.id)); $("#b-album").add(new Option(`${a.name} (${a.count})`, a.id)); }
+  for (const a of albums) { $("#f-album").add(new Option(`${a.name} (${a.count})`, a.id)); $("#b-album").add(new Option(`${a.name} (${a.count})`, a.id)); $("#m-album").add(new Option(`Tiles from: ${a.name} (${a.count})`, a.id)); }
   const q = new URLSearchParams(location.search);
   if (q.get("asset")) {
     const a = await fetch("../api/assets/" + q.get("asset"), { credentials: "include" }).then((r) => r.json());
