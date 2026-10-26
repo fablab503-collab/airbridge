@@ -17,6 +17,7 @@ After installing, Immich gets a **✨ Studio** button. On any photo it offers:
 | **Graphite** | Opens the photo in [Graphite](https://graphite.art), a full editor written in Rust (layers, drawing, text, filters). *File → Export* saves the result straight back into Immich. | Graphite (Apache-2.0) + a small patch |
 | **Any file format** | Imports RAW (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 …), HEIC, AVIF, JPEG XL, PSD, SVG, PDF, EXR, HDR, TGA, ICO, DDS, QOI, XPM … Formats Immich can't show are converted to full-quality TIFF. | rawler, libheif, jxl-oxide, psd, resvg, ImageMagick, ffmpeg, Poppler |
 | **Print** | Shows the print quality (DPI) for A6 … A0, upscales with AI when needed, makes a print-ready PDF at the exact paper size (optional crop marks). RAW files are developed at full resolution for printing. | Real-ESRGAN (BSD-3), pdf-writer |
+| **Photo mosaic** | Rebuilds a photo out of hundreds of your other photos as small tiles (from the whole library or one album) — like a giant puzzle: far away you see the photo, close up every tile is another picture. Styles: *classic*, *blend* (tiles shifted toward the colour they stand for), *puzzle* (jigsaw piece outlines) and *bubbles* (round tiles). Up to ~8000 pixels wide, saved back into Immich. | Rust `image`, resvg |
 | **Photo book** | Turns an album into a PDF book (cover + 1, 2 or 4 photos per page with date/place captions). | pdf-writer |
 | **Camera** (phones, tablets, computers) | A camera app at `/studio/camera/` (also in the ✨ menu). Photos and videos go **straight into Immich** (album *Studio Camera*) and are **never saved on the phone**. If the connection drops they wait in memory and upload when it's back. Front/back camera, zoom and light where the phone supports them. "Add to Home Screen" makes it an app icon. | Web standard camera + MediaRecorder |
 | **Your logo** | Comes set up as **Gimmich**: vector logo `studio/brand-default/logo.svg`, square app icon `app-icon.svg`, logo with the name `logo-with-name.svg`, name in Roboto (Android's font, SIL Open Font License, served by Studio itself). Studio → *Import any file* → *Your logo*: replaces the Immich logo, browser-tab icon and home-screen icon on your own Immich (admin only), optionally with your own name. *Back to Immich logo* undoes it. | resvg, Rust `image` |
@@ -157,6 +158,7 @@ immich-studio/
     src/main.rs               start-up, settings, helper commands
     src/routes.rs             photos, jobs, logo, Connect a device, camera upload
     src/tools.rs              import, edit, Graphite return, print, photo book
+    src/mosaic.rs             photo mosaic (big puzzle made of your photos)
     src/ai.rs                 AI labels, faces, face index, find a person, training
     src/labels.rs             label groups (environment, era, clothing …)
     src/faces.rs              face finding, recognition, age, 106 + 478 face points

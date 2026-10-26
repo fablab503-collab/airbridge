@@ -1,7 +1,7 @@
 //! Photo mosaic: rebuild one photo out of many small photos from your library, like a giant puzzle.
 //!
-//! Styles: "classic" (photos as they are), "blend" (each tile tinted toward the colour it stands for,
-//! so the big picture shows more clearly), "puzzle" (blend + jigsaw piece outlines) and "bubbles"
+//! Styles: "classic" (photos nearly as they are), "blend" (each tile's colours moved toward the colour
+//! it stands for, so the big picture shows more clearly), "puzzle" (blend + jigsaw piece outlines) and "bubbles"
 //! (round tiles on a dark background).
 
 use std::sync::Arc;
@@ -139,7 +139,7 @@ pub fn build(target: &RgbImage, tiles: &[RgbImage], s: &Settings) -> Result<(Rgb
                 continue;
             }
             // using one photo much more than its fair share costs a little extra
-            let penalty = 1.0 + 0.15 * (used[i] as f32 / fair.max(1.0));
+            let penalty = 1.0 + 0.5 * (used[i] as f32 / fair.max(1.0));
             let d = distance(sig, &want) * penalty;
             if d < best.0 {
                 best = (d, i);
@@ -151,13 +151,15 @@ pub fn build(target: &RgbImage, tiles: &[RgbImage], s: &Settings) -> Result<(Rgb
 
     let t = s.tile;
     let mut out = RgbImage::from_pixel(cols * t, rows * t, Rgb([18, 18, 22]));
+    // how far each tile's colours move toward the colour of its spot (the tile keeps its own detail)
     let tint = match s.style.as_str() {
-        "blend" | "puzzle" => 0.35,
-        _ => 0.0,
+        "blend" | "puzzle" => 0.6,
+        _ => 0.25,
     };
     for r in 0..rows {
         for c in 0..cols {
-            let tile = &tiles[chosen[(r * cols + c) as usize]];
+            let pick = chosen[(r * cols + c) as usize];
+            let (tile, have) = (&tiles[pick], &sigs[pick]);
             // the colour this cell stands for in the big picture
             let want = signature(target, (c as f32 * cw) as u32, (r as f32 * ch) as u32, cw.ceil() as u32, ch.ceil() as u32);
             let (half, rad) = (t as f32 / 2.0, t as f32 * 0.47);
@@ -169,7 +171,7 @@ pub fn build(target: &RgbImage, tiles: &[RgbImage], s: &Settings) -> Result<(Rgb
                     let q = ((y * 2 / t) * 2 + x * 2 / t) as usize;
                     let p = tile.get_pixel(x, y);
                     let px = Rgb(std::array::from_fn(|k| {
-                        (p[k] as f32 * (1.0 - tint) + want[q * 3 + k] * tint).round().clamp(0.0, 255.0) as u8
+                        (p[k] as f32 + tint * (want[q * 3 + k] - have[q * 3 + k])).round().clamp(0.0, 255.0) as u8
                     }));
                     out.put_pixel(c * t + x, r * t + y, px);
                 }

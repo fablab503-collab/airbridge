@@ -12,6 +12,7 @@ an AI upscale) never stops the rest from answering.
 | `src/ai.rs` | AI labels, analyse all, train, faces, face index, find a person at any age, confirm, learn |
 | `src/formats.rs` | RAW (rawler), HEIC/AVIF (libheif), JPEG XL, PSD, HDR/EXR, SVG, PDF and rare formats (ImageMagick, ffmpeg) |
 | `src/editor.rs` | every edit step |
+| `src/mosaic.rs` | photo mosaic: one photo rebuilt from many library photos (classic, blend, puzzle, bubbles) |
 | `src/printing.rs` | DPI report, Real-ESRGAN AI upscaling, print and photo book PDFs |
 | `src/clip.rs`, `src/labels.rs` | SigLIP2 numbers from Immich's AI server; label groups and trained heads |
 | `src/faces.rs` | SCRFD, ArcFace R100, age-ignoring layer, age, 106 outline points, 478-point mesh (ONNX Runtime) |
@@ -59,4 +60,4 @@ Settings (environment): `IMMICH_URL`, `IMMICH_ML_URL`, `IMMICH_API_KEY` (optiona
 Helper commands: `check-formats DIR...` (open every file), `convert IN OUT.jpg [QUALITY]`,
 `edit IN OUT.png '[steps]'`, `upscale IN OUT.png 4`, `faces IMG...`, `transcribe VIDEO`,
 `train-age-invariant TRAINED_DIR OUT.json`, `train-logistic X.json Y.json OUT.json`. `cargo test` covers the editor,
-print maths, PDFs, face alignment and training.
+print maths, PDFs, face alignment, training and the mosaic.
