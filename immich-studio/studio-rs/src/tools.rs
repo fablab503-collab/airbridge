@@ -40,7 +40,7 @@ async fn form_file(mut form: Multipart, default_name: &str) -> ApiResult<(String
 }
 
 /// A photo as pixels: the quick preview (for on-screen work) or the full original.
-async fn load(im: &Immich, id: &str, full: bool) -> anyhow::Result<(RgbImage, Value)> {
+pub async fn load(im: &Immich, id: &str, full: bool) -> anyhow::Result<(RgbImage, Value)> {
     let a = im.asset(id).await?;
     let img = if full {
         let data = im.original(id).await?;

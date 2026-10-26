@@ -5,11 +5,16 @@
 //! passed through unchanged to the Python Studio (STUDIO_PY_URL), so everything keeps working
 //! while pieces move over one at a time.
 
+mod ai;
 mod brand;
+mod clip;
 mod editor;
+mod faces;
 mod formats;
 mod immich;
 mod jobs;
+mod labels;
+mod learn;
 mod printing;
 mod proxy;
 mod routes;
@@ -29,6 +34,8 @@ pub struct Config {
     pub graphite_dir: PathBuf,
     pub downloads_dir: PathBuf,
     pub brand_default_dir: PathBuf,
+    pub model_dir: PathBuf,
+    pub trained_dir: PathBuf,
     pub public_url: Option<String>,
     pub camera_album: String,
 }
@@ -46,6 +53,8 @@ impl Config {
             graphite_dir: path("STUDIO_GRAPHITE_DIR", "/graphite"),
             downloads_dir: path("STUDIO_DOWNLOADS_DIR", "/downloads"),
             brand_default_dir: path("STUDIO_BRAND_DEFAULT_DIR", "/srv/brand-default"),
+            model_dir: path("STUDIO_MODEL_DIR", "/models"),
+            trained_dir: path("STUDIO_TRAINED_DIR", "/srv/trained"),
             public_url: var("GIMMICH_PUBLIC_URL").map(|u| u.trim_end_matches('/').to_string()),
             camera_album: var("STUDIO_CAMERA_ALBUM").unwrap_or_else(|| "Studio Camera".into()),
         }
@@ -56,6 +65,7 @@ pub struct AppState {
     pub cfg: Config,
     pub http: reqwest::Client,
     pub jobs: jobs::Jobs,
+    pub ai: ai::Ai,
 }
 
 pub type State = Arc<AppState>;
@@ -98,10 +108,11 @@ async fn main() -> anyhow::Result<()> {
     if args.get(1).map(String::as_str) == Some("check-formats") {
         return check_formats(&args[2..]);
     }
-    if args.get(1).map(String::as_str) == Some("convert") && args.len() == 4 {
-        // `studio-rs convert IN OUT.jpg`: read any format, write a JPEG (for checking by eye)
+    if args.get(1).map(String::as_str) == Some("convert") && (4..=5).contains(&args.len()) {
+        // `studio-rs convert IN OUT.jpg [QUALITY]`: read any format, write a JPEG (for checking by eye)
         let img = formats::open_any(&std::fs::read(&args[2])?, &args[2])?;
-        std::fs::write(&args[3], formats::to_jpeg(&img, Some(2000), 90)?)?;
+        let q = args.get(4).and_then(|q| q.parse().ok());
+        std::fs::write(&args[3], formats::to_jpeg(&img, if q.is_some() { None } else { Some(2000) }, q.unwrap_or(90))?)?;
         return Ok(());
     }
     if args.get(1).map(String::as_str) == Some("edit") && args.len() == 5 {
@@ -117,6 +128,39 @@ async fn main() -> anyhow::Result<()> {
         printing::upscale(&img, args[4].parse()?, |_| {})?.save(&args[3])?;
         return Ok(());
     }
+    if args.get(1).map(String::as_str) == Some("faces") && args.len() >= 3 {
+        // `studio-rs faces IMG...`: face results as JSON lines (for comparing with the Python Studio)
+        let dir = Config::from_env().model_dir;
+        let p = faces::FacePipeline::load(&dir)?;
+        for f in &args[2..] {
+            let img = formats::open_any(&std::fs::read(f)?, f)?;
+            let found: Vec<_> = p.analyze(&img, 0.6)?.into_iter().map(|f| serde_json::json!({
+                "box": f.bbox, "kps": f.kps, "age": f.age_insightface, "sex": f.sex, "emb": f.embedding, "raw": f.raw_embedding,
+                "p106": f.points106, "mesh": f.mesh.map(|m| m.iter().map(|q| [q[0], q[1]]).collect::<Vec<_>>()),
+            })).collect();
+            println!("{}", serde_json::json!({ "file": f, "faces": found }));
+        }
+        return Ok(());
+    }
+    if args.get(1).map(String::as_str) == Some("train-age-invariant") && args.len() == 4 {
+        // `studio-rs train-age-invariant TRAINED_DIR OUT.json`: the layer from FG-NET only (for checking)
+        let dir = std::path::Path::new(&args[2]);
+        let meta: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join("fgnet_antelopev2.json"))?)?;
+        let dim = meta["dim"].as_u64().unwrap_or(512) as usize;
+        let raw = std::fs::read(dir.join("fgnet_antelopev2.f32"))?;
+        let all: Vec<f32> = raw.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+        let x: Vec<Vec<f32>> = all.chunks(dim).map(|c| c.to_vec()).collect();
+        let y: Vec<String> = serde_json::from_value(meta["people"].clone())?;
+        std::fs::write(&args[3], serde_json::to_vec(&learn::age_invariant(&x, &y, 200, 0.3)?)?)?;
+        return Ok(());
+    }
+    if args.get(1).map(String::as_str) == Some("train-logistic") && args.len() == 5 {
+        // `studio-rs train-logistic X.json Y.json OUT.json`: label training on given numbers (for checking)
+        let x: Vec<Vec<f32>> = serde_json::from_slice(&std::fs::read(&args[2])?)?;
+        let y: Vec<String> = serde_json::from_slice(&std::fs::read(&args[3])?)?;
+        std::fs::write(&args[4], serde_json::to_vec(&learn::logistic_regression(&x, &y, 5.0)?)?)?;
+        return Ok(());
+    }
     tracing_subscriber::fmt().with_env_filter(
         tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
     ).init();
@@ -125,7 +169,8 @@ async fn main() -> anyhow::Result<()> {
     brand::seed_default(&cfg)?;
 
     let http = reqwest::Client::builder().timeout(std::time::Duration::from_secs(600)).build()?;
-    let state: State = Arc::new(AppState { cfg, http, jobs: jobs::Jobs::default() });
+    let ai = ai::Ai::new(http.clone(), cfg.model_dir.clone(), cfg.trained_dir.clone());
+    let state: State = Arc::new(AppState { cfg, http, jobs: jobs::Jobs::default(), ai });
 
     let app = Router::new()
         .merge(routes::router())

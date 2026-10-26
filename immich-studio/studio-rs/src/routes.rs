@@ -11,7 +11,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::{brand, formats, immich::{status_of, Immich}, proxy, tools, State as AppState};
+use crate::{ai, brand, formats, immich::{status_of, Immich}, proxy, tools, State as AppState};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -34,6 +34,14 @@ pub fn router() -> Router<AppState> {
         .route("/api/graphite-return/{id}", post(tools::graphite_return))
         .route("/api/print/{id}", get(tools::print_check).post(tools::print_make))
         .route("/api/book", post(tools::book))
+        .route("/api/analyze/{id}", post(ai::analyze_one))
+        .route("/api/analyze-all", post(ai::analyze_all))
+        .route("/api/train", post(ai::train))
+        .route("/api/faces/index", post(ai::index_faces))
+        .route("/api/faces/find", post(ai::find_person))
+        .route("/api/faces/confirm", post(ai::confirm_face))
+        .route("/api/faces/learn", post(ai::learn_faces))
+        .route("/api/faces/{id}", get(ai::faces))
         .route("/api/{*rest}", any(proxy::to_python))
 }
 

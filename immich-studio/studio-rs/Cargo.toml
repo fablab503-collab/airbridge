@@ -26,6 +26,7 @@ pdf-writer = "0.13"
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["load-dynamic", "ndarray"] }
 ndarray = "0.16"
 rayon = "1"
+nalgebra = { version = "0.33", default-features = false, features = ["std"] }
 tempfile = "3"
 resvg = "0.45"
 futures-util = "0.3"

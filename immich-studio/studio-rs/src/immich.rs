@@ -105,6 +105,52 @@ impl Immich {
         Ok(())
     }
 
+    /// Every photo/video matching the filters (all pages).
+    pub async fn all_assets(&self, filters: Value) -> Result<Vec<Value>> {
+        let mut out = vec![];
+        let mut page = Some(1);
+        while let Some(p) = page {
+            let (items, next) = self.assets(p, 250, filters.clone()).await?;
+            out.extend(items);
+            page = next;
+        }
+        Ok(out)
+    }
+
+    pub async fn set_description(&self, id: &str, text: &str) -> Result<()> {
+        self.send_json(Method::PUT, &format!("/assets/{id}"), &json!({ "description": text })).await?;
+        Ok(())
+    }
+
+    /// Create tags like "Environment/Beach" (nested) and return (name, id) pairs.
+    pub async fn upsert_tags(&self, names: &[String]) -> Result<Vec<(String, String)>> {
+        if names.is_empty() {
+            return Ok(vec![]);
+        }
+        let v = self.send_json(Method::PUT, "/tags", &json!({ "tags": names })).await?;
+        Ok(v.as_array().map(|a| a.iter().filter_map(|t| Some((t["value"].as_str()?.to_string(), t["id"].as_str()?.to_string()))).collect())
+            .unwrap_or_default())
+    }
+
+    pub async fn tag_assets(&self, tag_ids: &[String], asset_ids: &[String]) -> Result<()> {
+        if !tag_ids.is_empty() && !asset_ids.is_empty() {
+            self.send_json(Method::PUT, "/tags/assets", &json!({ "tagIds": tag_ids, "assetIds": asset_ids })).await?;
+        }
+        Ok(())
+    }
+
+    /// Take off this photo's tags that start with `prefix` (the user's own tags stay).
+    pub async fn remove_tag_prefix(&self, asset: &Value, prefix: &str) -> Result<()> {
+        let id = asset["id"].as_str().unwrap_or_default();
+        for t in asset["tags"].as_array().into_iter().flatten() {
+            if t["value"].as_str().is_some_and(|v| v.starts_with(prefix)) {
+                let tag = t["id"].as_str().unwrap_or_default();
+                self.send_json(Method::DELETE, &format!("/tags/{tag}/assets"), &json!({ "ids": [id] })).await?;
+            }
+        }
+        Ok(())
+    }
+
     /// Every photo/video id in an album, in Immich's order.
     pub async fn album_asset_ids(&self, album_id: &str) -> Result<Vec<String>> {
         let mut ids = vec![];
