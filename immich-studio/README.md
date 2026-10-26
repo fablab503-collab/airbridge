@@ -3,6 +3,8 @@
 Extra AI tools that plug into [Immich](https://immich.app) (the self-hosted photo app).
 Everything runs on your own computer, and every model is open source.
 
+**Everything at a glance, with screenshots from iPhone, iPad, Apple Watch and Android: [WHAT-WORKS.md](WHAT-WORKS.md).**
+
 Studio is **one Rust program** (`studio/`): a web server (axum + tokio) that runs every tool below on parallel
 threads — file formats, editing, printing, AI labels, faces and speech-to-text — next to Immich.
 
@@ -171,6 +173,8 @@ immich-studio/
     trained/                  small models we trained (environment, era, age, face layer, face mesh)
     tests/                    end-to-end test + camera device test
   graphite/                   Graphite patch + build script
+  device-tests/               tries the app on iPhone, iPad, Apple Watch and Android simulators
+  docs/device-tests/          their latest screenshots
   eval/                       training + testing scripts behind the numbers above (Python, offline only;
                               export_trained.py turns their results into the files in studio/trained/)
 ```
