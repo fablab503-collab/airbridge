@@ -102,9 +102,21 @@ async function startCamera() {
   stream?.getTracks().forEach((t) => t.stop());
   const size = maxQuality ? { width: { ideal: 4096 }, height: { ideal: 3072 } } : { width: { ideal: 1920 }, height: { ideal: 1080 } };
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, ...size }, audio: mode === "video" });
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, ...size }, audio: mode === "video" });
+    } catch (e) {
+      if (e.name !== "OverconstrainedError") throw e;
+      // this camera can't do the wished size/side: ask for any camera at all
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: mode === "video" });
+    }
   } catch (e) {
-    say(`Camera not available: ${e.name}.<br>Allow camera access for this site and reload.`);
+    const why = {
+      NotAllowedError: "Camera access was refused.<br>Allow the camera for this site (browser settings) and reload.",
+      NotFoundError: "No camera found on this device.",
+      OverconstrainedError: "No camera found on this device.",
+      NotReadableError: "The camera is busy.<br>Close the other app that uses it and reload.",
+    }[e.name] || `Camera not available (${e.name}).<br>Allow camera access for this site and reload.`;
+    say(why);
     return;
   }
   track = stream.getVideoTracks()[0];
