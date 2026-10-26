@@ -19,19 +19,38 @@ After installing, Immich gets a **✨ Studio** button. On any photo it offers:
 | **Your logo** | Comes set up as **Gimmich**: vector logo `studio/brand-default/logo.svg`, square app icon `app-icon.svg`, logo with the name `logo-with-name.svg`, name in Roboto (Android's font, SIL Open Font License, served by Studio itself). Studio → *Import any file* → *Your logo*: replaces the Immich logo, browser-tab icon and home-screen icon on your own Immich (admin only), optionally with your own name. *Back to Immich logo* undoes it. | Pillow |
 | **Video to text** | Writes down what people say in a video (Whisper), puts it in the video's description (so Immich search finds it) and makes subtitles (.srt). | faster-whisper (MIT) |
 
-## Install (next to an existing Immich)
+## Install
+
+### Easiest: the installer (Mac or Linux)
+
+On the computer that will keep your photos (e.g. the iMac), open **Terminal** and paste:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fablab503-collab/airbridge/main/immich-studio/installer/install.sh | bash
+```
+
+Until this work is merged into `main`, use the branch address instead:
+`https://raw.githubusercontent.com/fablab503-collab/airbridge/claude/jolly-edison-ugpm94/immich-studio/installer/install.sh`
+(or double-click `installer/Install Gimmich.command` on a Mac, which tries both). It installs Docker and Tailscale if needed,
+sets up Immich + Gimmich Studio in `~/gimmich`, keeps the Mac awake, gives it a private `https://` address and
+opens **Connect a device**. Run it again any time to update. Options: `PHOTOS_DIR=/Volumes/Big/Photos` (external
+drive), `GIMMICH_PORT=2283`, `SKIP_TAILSCALE=1`, `YES=1` (put them before `bash`).
+
+### Connect your phone, tablet and laptop
+
+1. Install **Tailscale** on the device and log in with the same account as the iMac.
+2. On the iMac open `…/studio/connect/` (✨ Studio → *Connect a device*) and scan the QR code.
+3. The page shows the right thing for that device: Android app + one-tap connect, iPhone/iPad "Add to Home
+   Screen" steps, or the desktop app for computers.
+
+### Manual install (next to an existing Immich)
 
 1. Put this `immich-studio` folder inside your `immich-app` folder (next to Immich's `docker-compose.yml`).
-2. A ready-built Graphite editor is included in `graphite/dist`. To rebuild it yourself (needs Rust + Node.js, 20–60 min):
-   ```sh
-   ./immich-studio/graphite/build.sh
-   ```
-3. Start everything:
+2. Start everything:
    ```sh
    docker compose -f docker-compose.yml -f immich-studio/docker-compose.studio.yml up -d --build
    ```
-4. Open Immich as usual (`http://<your-computer>:2283`). The ✨ Studio button is bottom-right.
-   Studio's own page is `http://<your-computer>:2283/studio/`.
+3. Open Immich as usual (`http://<your-computer>:2283`). The ✨ Studio button is bottom-right.
 
 Studio uses your normal Immich login (no extra password) and only sees the photos of whoever is logged in.
 The first run downloads about 600 MB of models.
