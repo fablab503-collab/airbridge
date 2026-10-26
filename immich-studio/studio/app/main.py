@@ -558,6 +558,35 @@ def _seed_brand():
 _seed_brand()
 
 
+# ---------------------------------------------------------------- connect ---
+DOWNLOADS_DIR = os.environ.get("STUDIO_DOWNLOADS_DIR", "/downloads")
+GITHUB_BUILDS = "https://github.com/fablab503-collab/airbridge/actions/workflows/gimmich-desktop.yml"
+
+
+@app.get("/api/connect")
+def connect_info(request: Request):
+    """Everything the "Connect a device" page needs. Public: it holds no private data."""
+    public = os.environ.get("GIMMICH_PUBLIC_URL", "").rstrip("/")
+    if not public:  # fall back to the address this page was opened with
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        public = f"{proto}://{request.headers.get('host', request.url.netloc)}"
+    files = {}
+    for kind in ("android", "desktop"):
+        folder = os.path.join(DOWNLOADS_DIR, kind)
+        if os.path.isdir(folder):
+            files[kind] = sorted(f for f in os.listdir(folder) if not f.startswith("."))
+    return {"address": public, "secure": public.startswith("https://"), "files": files, "desktop_builds": GITHUB_BUILDS}
+
+
+@app.get("/api/downloads/{kind}/{name}")
+def download(kind: str, name: str):
+    folder = os.path.join(DOWNLOADS_DIR, kind)
+    if kind not in ("android", "desktop") or "/" in name or name.startswith(".") or not os.path.isfile(os.path.join(folder, name)):
+        raise HTTPException(404)
+    media = "application/vnd.android.package-archive" if name.endswith(".apk") else "application/octet-stream"
+    return FileResponse(os.path.join(folder, name), media_type=media, filename=name)
+
+
 # ----------------------------------------------------------------- camera ---
 CAMERA_ALBUM = os.environ.get("STUDIO_CAMERA_ALBUM", "Studio Camera")
 

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect a device · Gimmich</title>
+<style>
+@font-face { font-family: "Studio Roboto"; font-weight: 500; src: url(../fonts/roboto-500.woff2) format("woff2"); }
+:root { --bg: #f6f7fb; --card: #fff; --text: #1d2130; --muted: #646b80; --line: #e2e5ee; --accent: #4250af; --accent-text: #fff; --warn: #a15c00; --chip: #eef0fa; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #12131a; --card: #1b1d27; --text: #e8eaf2; --muted: #9aa1b8; --line: #2c2f3d; --accent: #aab4ff; --accent-text: #12131a; --warn: #f0b35a; --chip: #262a3a; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+header img { height: 48px; }
+h1 { font: 500 30px "Studio Roboto", Roboto, sans-serif; color: var(--accent); margin: 0; }
+h2 { font-size: 18px; margin: 0 0 8px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 14px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: center; }
+@media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+#qr { background: #fff; padding: 14px; border-radius: 14px; width: 100%; max-width: 300px; justify-self: center; }
+#qr svg { width: 100%; height: auto; display: block; }
+ol { margin: 0; padding-left: 22px; } li { margin: 6px 0; }
+.muted { color: var(--muted); font-size: 14px; }
+.addr { font: 600 15px ui-monospace, Menlo, monospace; background: var(--chip); padding: 4px 8px; border-radius: 8px; word-break: break-all; }
+.btn { display: inline-block; text-decoration: none; background: var(--accent); color: var(--accent-text); padding: 11px 16px; border-radius: 10px; font-weight: 600; margin: 4px 6px 4px 0; border: 0; font-size: 15px; cursor: pointer; }
+.btn.light { background: var(--chip); color: var(--text); }
+.warn { color: var(--warn); }
+.hide { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header><img id="logo" src="../api/brand/logo.svg" alt="" onerror="this.remove()"><h1 id="name">Gimmich</h1></header>
+
+  <!-- shown on computers (e.g. on the iMac right after installing) -->
+  <section id="computer" class="hide">
+    <div class="card grid">
+      <div>
+        <h2>Connect your phone, tablet or laptop</h2>
+        <ol>
+          <li>On that device, install <b>Tailscale</b> and log in with the <b>same account</b> as this computer:
+            <a href="https://apps.apple.com/app/tailscale/id1470499037">iPhone/iPad</a> ·
+            <a href="https://play.google.com/store/apps/details?id=com.tailscale.ipn">Android</a> ·
+            <a href="https://tailscale.com/download">Mac/Windows/Linux</a></li>
+          <li>Scan this code with the phone's camera (or type the address below).</li>
+          <li>The page that opens shows the right app for that device.</li>
+        </ol>
+        <p>Address: <span class="addr" id="addr"></span></p>
+        <p class="warn hide" id="insecure">This address starts with http://, so phones won't allow the camera.
+          Run the installer again with Tailscale to get an https:// address.</p>
+      </div>
+      <div id="qr" aria-label="QR code"></div>
+    </div>
+    <div class="card">
+      <h2>Desktop app for this computer</h2>
+      <p class="muted">Gimmich in its own window with a menu (Photos, Studio, Camera, Photo book).</p>
+      <div id="desktop-files"></div>
+      <a class="btn light" id="builds" href="#">Windows · Mac · Linux downloads (GitHub)</a>
+    </div>
+  </section>
+
+  <!-- shown on Android -->
+  <section id="android" class="hide">
+    <div class="card">
+      <h2>1. Install Gimmich Camera</h2>
+      <p class="muted">Photos go straight to your Gimmich and are never saved on this phone.
+        Android will ask to allow installing apps from your browser: allow it once.</p>
+      <a class="btn" id="apk" href="#">Download the app</a>
+    </div>
+    <div class="card">
+      <h2>2. Connect it</h2>
+      <p class="muted">Fills in your Gimmich address in the app, nothing to type.</p>
+      <a class="btn" id="deeplink" href="#">Open in Gimmich Camera</a>
+    </div>
+    <div class="card">
+      <h2>All your photos</h2>
+      <p class="muted">Open Gimmich, then Chrome menu ⋮ → <b>Install app</b> for an icon on the home screen.</p>
+      <a class="btn light" href="../../">Open Gimmich</a>
+    </div>
+  </section>
+
+  <!-- shown on iPhone / iPad -->
+  <section id="ios" class="hide">
+    <div class="card">
+      <h2>Gimmich Camera on your iPhone</h2>
+      <ol>
+        <li>Tap <b>Open the camera</b> below and log in once.</li>
+        <li>Tap the <b>Share</b> button <span aria-hidden="true">⬆︎</span> → <b>Add to Home Screen</b> → <b>Add</b>.</li>
+        <li>Open it from the new icon. Photos go straight to Gimmich, not into the iPhone's Photos.</li>
+      </ol>
+      <a class="btn" href="../camera/">Open the camera</a>
+    </div>
+    <div class="card">
+      <h2>All your photos</h2>
+      <p class="muted">Same trick: open Gimmich, Share → Add to Home Screen.</p>
+      <a class="btn light" href="../../">Open Gimmich</a>
+    </div>
+  </section>
+</main>
+<script src="qrcode.js"></script>
+<script>
+(async () => {
+  const $ = (s) => document.querySelector(s);
+  const info = await fetch("../api/connect").then((r) => r.json());
+  const brand = await fetch("../api/brand").then((r) => r.json()).catch(() => ({}));
+  if (brand.name) { $("#name").textContent = brand.name; document.title = "Connect a device · " + brand.name; }
+  if (brand.logo) $("#logo").src = "../" + brand.logo;
+
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/.test(ua);
+  const show = isIOS ? "#ios" : isAndroid ? "#android" : "#computer";
+  $(show).classList.remove("hide");
+
+  const connectUrl = info.address + "/studio/connect/";
+  $("#addr").textContent = info.address;
+  $("#insecure").classList.toggle("hide", info.secure);
+  const qr = qrcode(0, "M");
+  qr.addData(connectUrl);
+  qr.make();
+  $("#qr").innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+
+  const apk = (info.files.android || []).find((f) => f.endsWith(".apk"));
+  if (apk) $("#apk").href = "../api/downloads/android/" + encodeURIComponent(apk);
+  else $("#apk").replaceWith(Object.assign(document.createElement("p"), { className: "muted", textContent: "The app file isn't on this server yet." }));
+  $("#deeplink").href = "gimmich://connect?server=" + encodeURIComponent(info.address);
+
+  $("#builds").href = info.desktop_builds;
+  const mine = /Windows/.test(ua) ? /\.(exe|msi)$/ : /Mac OS X|Macintosh/.test(ua) ? /\.dmg$/ : /\.(deb|AppImage|rpm)$/;
+  for (const f of (info.files.desktop || []).filter((f) => mine.test(f))) {
+    const a = Object.assign(document.createElement("a"), { className: "btn", href: "../api/downloads/desktop/" + encodeURIComponent(f), textContent: "Download " + f });
+    $("#desktop-files").append(a);
+  }
+})();
+</script>
+</body>
+</html>

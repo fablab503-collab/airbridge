@@ -80,13 +80,13 @@
       ? [["AI labels & faces", `?asset=${id}&tab=ai`], ["Edit & colours", `?asset=${id}&tab=edit`],
          ["Open in Graphite", "graphite"], ["Print A4–A1", `?asset=${id}&tab=print`], ["Video to text", `?asset=${id}&tab=video`],
          ["Studio home", ""]]
-      : [["Studio home", ""], ["Camera", "camera/"], ["Photo book", "?view=book"], ["Label & train", "?view=train"], ["Import any file", "?view=import"]];
+      : [["Studio home", ""], ["Connect a device", "connect/"], ["Camera", "camera/"], ["Photo book", "?view=book"], ["Label & train", "?view=train"], ["Import any file", "?view=import"]];
     fab.querySelector(".menu").innerHTML = "";
     for (const [label, q] of items) {
       const b = document.createElement("button");
       b.textContent = label;
       b.onclick = () => {
-        if (q === "camera/") {
+        if (q === "camera/" || q === "connect/") {
           location.href = BASE + q; // full screen: browsers block cameras inside embedded panels
         } else if (q === "graphite") {
           const base = new URL(BASE, location.origin);

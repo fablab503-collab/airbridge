@@ -43,9 +43,41 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         prefs = getSharedPreferences("gimmich", MODE_PRIVATE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if (connectFrom(getIntent())) return;
         String server = prefs.getString("server", "");
         if (server.isEmpty()) showSetup(null);
         else openCamera(server);
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        connectFrom(intent);
+    }
+
+    /** gimmich://connect?server=https://... from the "Connect a device" page: save it and open the camera. */
+    private boolean connectFrom(android.content.Intent intent) {
+        Uri data = intent == null ? null : intent.getData();
+        if (data == null || !"gimmich".equals(data.getScheme())) return false;
+        String server = normalise(data.getQueryParameter("server") == null ? "" : data.getQueryParameter("server"));
+        if (server == null) {
+            showSetup("That link had no https:// address. Type it below.");
+            return true;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Connect to this Gimmich?")
+                .setMessage(server)
+                .setPositiveButton("Connect", (d, w) -> {
+                    prefs.edit().putString("server", server).apply();
+                    openCamera(server);
+                })
+                .setNegativeButton("Cancel", (d, w) -> {
+                    String saved = prefs.getString("server", "");
+                    if (saved.isEmpty()) showSetup(null); else openCamera(saved);
+                })
+                .setCancelable(false)
+                .show();
+        return true;
     }
 
     /** First start (or the server could not be reached): ask for the Gimmich address. */
