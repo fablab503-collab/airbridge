@@ -461,6 +461,24 @@ async def graphite_return(asset_id: str, request: Request, file: UploadFile = Fi
     return {"new_asset": new_id}
 
 
+# ----------------------------------------------------------------- camera ---
+CAMERA_ALBUM = os.environ.get("STUDIO_CAMERA_ALBUM", "Studio Camera")
+
+
+@app.post("/api/camera/upload")
+async def camera_upload(request: Request, file: UploadFile = File(...), taken: str | None = None):
+    """A photo or video straight from the Studio camera: it goes into Immich and is never kept on the phone."""
+    im = immich_for(request)
+    form = await request.form()
+    taken = form.get("taken") or taken
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    asset_id = im.upload(data, file.filename or "camera.jpg", created=taken)
+    im.ensure_album(CAMERA_ALBUM, [asset_id])
+    return {"asset": asset_id, "album": CAMERA_ALBUM, "bytes": len(data)}
+
+
 # --------------------------------------------------------------- formats ---
 @app.post("/api/import")
 async def import_file(request: Request, file: UploadFile = File(...)):

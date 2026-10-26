@@ -15,6 +15,7 @@ After installing, Immich gets a **✨ Studio** button. On any photo it offers:
 | **Any file format** | Imports RAW (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 …), HEIC, AVIF, JPEG XL, PSD, SVG, PDF, EXR, HDR, TGA, ICO, DDS, QOI, XPM … Formats Immich can't show are converted to full-quality TIFF. | LibRaw (rawpy), libheif, psd-tools, CairoSVG, PDFium, ImageMagick, ffmpeg |
 | **Print** | Shows the print quality (DPI) for A6 … A0, upscales with AI when needed, makes a print-ready PDF at the exact paper size (optional crop marks). RAW files are developed at full resolution for printing. | Real-ESRGAN (BSD-3), ReportLab |
 | **Photo book** | Turns an album into a PDF book (cover + 1, 2 or 4 photos per page with date/place captions). | ReportLab |
+| **Camera** (phones, tablets, computers) | A camera app at `/studio/camera/` (also in the ✨ menu). Photos and videos go **straight into Immich** (album *Studio Camera*) and are **never saved on the phone**. If the connection drops they wait in memory and upload when it's back. Front/back camera, zoom and light where the phone supports them. "Add to Home Screen" makes it an app icon. | Web standard camera + MediaRecorder |
 | **Video to text** | Writes down what people say in a video (Whisper), puts it in the video's description (so Immich search finds it) and makes subtitles (.srt). | faster-whisper (MIT) |
 
 ## Install (next to an existing Immich)
@@ -38,6 +39,12 @@ The first run downloads about 600 MB of models.
 
 Immich → *Administration → Settings → Machine Learning → Facial Recognition → Model*: choose **antelopev2**,
 then *Administration → Jobs → Face Detection → All*. See the test results below.
+
+### Using the camera on your phone
+
+Phones only allow the camera on **https://** addresses. Open Immich through HTTPS (for example with
+[Tailscale](https://tailscale.com) or a reverse proxy with a certificate), go to `https://<your-address>/studio/camera/`,
+log in once, then choose **Share → Add to Home Screen** (iPhone/iPad) or **⋮ → Install app** (Android).
 
 ## How well does it work? (measured, not guessed)
 
@@ -94,6 +101,10 @@ tested only on photos that were *not* confirmed (`eval/learn_from_confirmations_
 **Everything else** — `studio/tests/test_formats.py`: 32 of 32 sample files (24 formats + RAW from Canon CR2/CR3,
 Nikon, Sony, Fujifilm, Panasonic, Olympus, iPhone DNG). `studio/tests/test_api.py`: 16 of 16 end-to-end checks
 (print + AI upscale, photo book, edit/save/delete, RAW/EXR import, Graphite export back to Immich, Whisper transcript, faces).
+`studio/tests/camera_devices.js`: camera on 10 device profiles (iPhone 15 Pro Max, iPhone 14, iPad Pro 11, iPad Mini, Pixel 8,
+Galaxy S24, Galaxy Tab S9, desktop Chrome/Safari/Edge) — photo, camera switch, video, offline-then-upload, nothing stored on
+the device: 10/10 in 3 rounds in a row. These are Chromium with each device's screen, touch and browser ID; Apple's real Safari
+engine still needs a check on a real iPhone.
 
 ## Honest limits
 
