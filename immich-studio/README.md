@@ -43,7 +43,40 @@ then *Administration → Jobs → Face Detection → All*. See the test results 
 
 All numbers come from the scripts in `eval/`, tested on photos the models never saw while learning.
 
-RESULTS_PLACEHOLDER
+**Labels** (zero-shot = only describing sentences; trained = small model learned from examples; held-out half tested)
+
+| Label group | Test set | Zero-shot | Trained (used) |
+|---|---|---|---|
+| Environment, 42 labels | Places365 validation, 1 260 photos | 74.6 % | **77.6 %** (93.5 % in top 3; prison 28 of 34) |
+| Era (decade) | fashion-decade-images, 1 252 photos | 62.8 % | **75.7 %** exact, 93.7 % within one decade |
+| Clothing type, 16 labels | fashion-product-images, 783 photos | 78.9 % | **93.7 %** |
+| Clothing style, 4 labels | fashion-product-images, 240 photos | 61.3 % | **84.2 %** |
+| Clothing colour, 12 labels | fashion-product-images, 720 photos | **70.4 %** (used) | 69.2 % (not used) |
+
+**Age** — trained on UTKFace, tested on FG-NET (82 different people, ages 0-69):
+
+| Model | Average error | Within 5 years |
+|---|---|---|
+| InsightFace genderage (ready-made) | 12.9 years | 23 % |
+| Ours on ArcFace numbers | 11.6 years | 22 % |
+| **Ours on SigLIP2 numbers (used)** | **5.4 years** | **56 %** |
+
+**Same person at different ages** — FG-NET, "is the most similar other photo the same person?" (rank-1):
+
+| Model | Any age gap | 10+ years apart | 20+ years apart |
+|---|---|---|---|
+| buffalo_l (Immich default) | 96.2 % | 75.4 % | 62.3 % |
+| antelopev2 (stronger, recommended for Immich) | 96.7 % | 76.5 % | 65.5 % |
+| 478 face-mesh points only | 11.4 % | 4.5 % | 2.6 % |
+
+Adding our trained "ignore ageing" layer (tested on *other* people only, 5-fold, so smaller search sets):
+antelopev2 86.0 % → **92.6 %** at 10+ years, 74.2 % → **76.4 %** at 20+ years.
+At the default "likely same person" threshold (0.36) about **1 in 100** matches is the wrong person and 87 % of
+same-person pairs are found.
+
+**Everything else** — `studio/tests/test_formats.py`: 32 of 32 sample files (24 formats + RAW from Canon CR2/CR3,
+Nikon, Sony, Fujifilm, Panasonic, Olympus, iPhone DNG). `studio/tests/test_api.py`: 16 of 16 end-to-end checks
+(print + AI upscale, photo book, edit/save/delete, RAW/EXR import, Graphite export back to Immich, Whisper transcript, faces).
 
 ## Honest limits
 
@@ -51,10 +84,14 @@ RESULTS_PLACEHOLDER
   Large public tests show the best systems still make mistakes when the age gap is big. Studio shows how sure it is instead of pretending.
 * A grid of face points (the 478-point mesh) is great for drawing and measuring a face, but on its own it identifies people
   much worse than ArcFace "face fingerprints" — see the table. Studio uses the mesh for display and ArcFace for identity.
-* Age and era are estimates. Clothing labels are judged on the area under each face.
+* The "ignore ageing" layer learned from only 82 people (FG-NET). It helped on held-out people, but may help less
+  for faces unlike FG-NET's. Delete `trained/age_invariant_antelopev2.pkl` to switch it off.
+* Age and era are estimates. Clothing labels are judged on the area under each face; the clothing models learned
+  from product photos, so they can be less accurate on everyday snapshots.
 * AI upscaling invents plausible detail; it can't recover detail that was never captured. Above ×4 the result gets soft.
-* The Era model was trained on `tonyassi/fashion-decade-images-1`, which states no licence — keep it for personal use,
-  or delete `trained/label_heads.pkl`'s Era part by retraining without it.
+* Licences of the training data: the Era model learned from `tonyassi/fashion-decade-images-1` and the clothing
+  models from `ashraq/fashion-product-images-small`; neither states a licence, so keep those models for personal use.
+  Without `trained/label_heads.pkl` Studio falls back to zero-shot labels.
 
 ## Files
 

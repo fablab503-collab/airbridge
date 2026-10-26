@@ -67,8 +67,8 @@ def _via_tool(data: bytes, name: str) -> Image.Image:
                     ["ffmpeg", "-loglevel", "error", "-y", "-i", src, "-frames:v", "1", dst]):
             try:
                 subprocess.run(cmd, check=True, capture_output=True, timeout=300)
-                if os.path.exists(dst):
-                    return Image.open(dst).copy()
+                if os.path.exists(dst):  # read the PNG the normal way (16-bit, transparency, colour mode)
+                    return open_any(open(dst, "rb").read(), "converted.png")
             except (subprocess.SubprocessError, FileNotFoundError):
                 continue
     raise ValueError(f"Cannot read {name}")

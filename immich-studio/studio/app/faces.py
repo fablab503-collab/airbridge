@@ -156,16 +156,22 @@ class GenderAge:
 
 
 class AgeHead:
-    """Our own age model: ridge regression trained on ArcFace numbers (train_age.py)."""
+    """Our own age model: ridge regression on SigLIP2 numbers of the aligned face, trained on
+    UTKFace (eval/train_age.py). On FG-NET it is off by 5.4 years on average vs 12.9 for genderage."""
 
     def __init__(self, path: str | None = None):
-        path = path or os.path.join(MODEL_DIR, "age_head.pkl")
-        self.model = pickle.load(open(path, "rb")) if os.path.exists(path) else None
+        path = path or os.path.join(MODEL_DIR, "age_head_siglip2.pkl")
+        saved = pickle.load(open(path, "rb")) if os.path.exists(path) else None
+        self.model = saved["model"] if saved else None
+        self.clip_model = saved["clip_model"] if saved else None
 
-    def predict(self, embeddings: np.ndarray) -> np.ndarray | None:
+    def predict(self, aligned_bgr_list: list[np.ndarray]) -> np.ndarray | None:
         if self.model is None:
             return None
-        return np.clip(self.model.predict(embeddings), 0, 100)
+        from . import clip
+        embs = np.stack([clip.embed_image(cv2.imencode(".jpg", c)[1].tobytes(), self.clip_model)
+                         for c in aligned_bgr_list])
+        return np.clip(self.model.predict(embs), 0, 100)
 
 
 class FaceMesh:
@@ -210,7 +216,6 @@ class FacePipeline:
         strong = os.path.join(MODEL_DIR, "antelopev2", "glintr100.onnx")
         self.recognizer = FaceRecognizer(strong if os.path.exists(strong) else None)
         self.age_invariant = AgeInvariant()
-        self.age_recognizer = FaceRecognizer() if os.path.exists(strong) else self.recognizer
         self.genderage = GenderAge()
         self.age_head = AgeHead()
         self.mesh = FaceMesh() if with_mesh else None
@@ -221,7 +226,10 @@ class FacePipeline:
             return faces
         crops = [align(img_bgr, f.kps) for f in faces]
         embs = self.age_invariant(self.recognizer.embed(crops))
-        ages = self.age_head.predict(self.age_recognizer.embed(crops)) if self.age_head.model else None
+        try:
+            ages = self.age_head.predict(crops)
+        except Exception:  # ML server unreachable: fall back to InsightFace's guess
+            ages = None
         for i, f in enumerate(faces):
             f.embedding = embs[i]
             ga_age, f.sex = self.genderage.predict(img_bgr, f.box)
