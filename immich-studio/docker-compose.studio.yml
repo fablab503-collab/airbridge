@@ -1,0 +1,48 @@
+# Immich Studio add-on. Use together with Immich's own docker-compose.yml:
+#
+#   (put this immich-studio folder inside your immich-app folder, next to docker-compose.yml)
+#   docker compose -f docker-compose.yml -f immich-studio/docker-compose.studio.yml up -d --build
+#
+# Immich stays at http://<your-computer>:2283 ; Studio appears inside it (✨ Studio button)
+# and at http://<your-computer>:2283/studio/
+name: immich
+
+services:
+  immich-server:
+    # The gateway below now answers on port 2283 and passes Immich traffic through.
+    ports: !reset []
+
+  immich-studio:
+    container_name: immich_studio
+    build: ./immich-studio/studio
+    volumes:
+      - studio-models:/models
+      - studio-data:/data
+      - ./immich-studio/graphite/dist:/graphite:ro
+    environment:
+      IMMICH_URL: http://immich-server:2283
+      IMMICH_ML_URL: http://immich-machine-learning:3003
+      # Bigger = better labels but slower. Immich downloads it on first use.
+      STUDIO_CLIP_MODEL: ViT-B-16-SigLIP2__webli
+      # Whisper size: tiny / base / small / medium (bigger = better + slower)
+      STUDIO_WHISPER_MODEL: base
+    depends_on:
+      - immich-server
+      - immich-machine-learning
+    restart: always
+
+  immich-gateway:
+    container_name: immich_gateway
+    image: nginx:1.29-alpine
+    ports:
+      - '2283:2283'
+    volumes:
+      - ./immich-studio/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - immich-server
+      - immich-studio
+    restart: always
+
+volumes:
+  studio-models:
+  studio-data:
