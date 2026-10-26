@@ -461,6 +461,59 @@ async def graphite_return(asset_id: str, request: Request, file: UploadFile = Fi
     return {"new_asset": new_id}
 
 
+# ------------------------------------------------------------------ brand ---
+BRAND_DIR = os.path.join(DATA_DIR, "brand")
+
+
+@app.get("/api/brand")
+def brand():
+    """Public on purpose: the login page shows the logo before anyone is logged in."""
+    path = os.path.join(BRAND_DIR, "logo.png")
+    if not os.path.exists(path):
+        return {"logo": None}
+    meta = json.load(open(os.path.join(BRAND_DIR, "brand.json"))) if os.path.exists(os.path.join(BRAND_DIR, "brand.json")) else {}
+    return {"logo": f"api/brand/logo.png?v={int(os.path.getmtime(path))}", "name": meta.get("name")}
+
+
+@app.get("/api/brand/{name}")
+def brand_file(name: str):
+    if name not in ("logo.png", "icon-180.png", "icon-512.png", "favicon-32.png"):
+        raise HTTPException(404)
+    path = os.path.join(BRAND_DIR, name)
+    if not os.path.exists(path):
+        raise HTTPException(404)
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
+
+
+@app.post("/api/brand")
+async def set_brand(request: Request, file: UploadFile | None = File(None)):
+    """Admin only: upload your own logo (any image format) and optionally a name to show instead of "Immich"."""
+    im = immich_for(request)
+    if not im._req("GET", "/users/me").json().get("isAdmin"):
+        raise HTTPException(403, "Only the Immich admin can change the logo.")
+    form = await request.form()
+    os.makedirs(BRAND_DIR, exist_ok=True)
+    if form.get("reset"):
+        for f in os.listdir(BRAND_DIR):
+            os.remove(os.path.join(BRAND_DIR, f))
+        return {"logo": None}
+    if file is not None:
+        img = formats.open_any(await file.read(), file.filename or "logo.png") if not (file.filename or "").lower().endswith(".png") \
+            else Image.open(io.BytesIO(await file.read()))
+        img = img.convert("RGBA")
+        img.thumbnail((1200, 400))
+        img.save(os.path.join(BRAND_DIR, "logo.png"))
+        # square icons (browser tab, iPhone home screen): logo centred on its own background
+        side = max(img.size)
+        square = Image.new("RGBA", (side, side), (255, 255, 255, 255))
+        square.paste(img, ((side - img.width) // 2, (side - img.height) // 2), img)
+        for size, name in ((180, "icon-180.png"), (512, "icon-512.png"), (32, "favicon-32.png")):
+            square.resize((size, size), Image.LANCZOS).save(os.path.join(BRAND_DIR, name))
+    name = (form.get("name") or "").strip()[:40]
+    json.dump({"name": name or None}, open(os.path.join(BRAND_DIR, "brand.json"), "w"))
+    return brand()
+
+
 # ----------------------------------------------------------------- camera ---
 CAMERA_ALBUM = os.environ.get("STUDIO_CAMERA_ALBUM", "Studio Camera")
 

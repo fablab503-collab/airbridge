@@ -4,6 +4,27 @@
   if (window.__immichStudio) return;
   window.__immichStudio = true;
   const BASE = "/studio/";
+
+  // Your own logo (set in Studio → Logo): replaces Immich's logo, tab icon and home-screen icon.
+  fetch(BASE + "api/brand").then((r) => r.json()).then((b) => {
+    if (!b.logo) return;
+    const logo = BASE + b.logo;
+    const swap = () => {
+      for (const img of document.querySelectorAll('img[alt="Immich logo"]')) {
+        if (img.dataset.studio !== logo) {
+          img.src = logo; img.dataset.studio = logo; img.style.objectFit = "contain";
+          img.style.aspectRatio = "auto"; img.style.width = "auto"; // Immich draws its logo in a square box on some pages
+        }
+      }
+      if (b.name && document.title.includes("Immich")) document.title = document.title.replace(/Immich/g, b.name);
+    };
+    for (const l of document.querySelectorAll('link[rel*="icon"]')) l.remove();
+    for (const [rel, file] of [["icon", "favicon-32.png"], ["apple-touch-icon", "icon-180.png"]]) {
+      const l = document.createElement("link"); l.rel = rel; l.href = BASE + "api/brand/" + file; document.head.append(l);
+    }
+    swap();
+    new MutationObserver(swap).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+  }).catch(() => {});
   const css = `
     #studio-fab{position:fixed;right:18px;bottom:18px;z-index:2147483000;display:flex;flex-direction:column;align-items:flex-end;gap:6px;font:14px system-ui,sans-serif}
     #studio-fab button{border:0;border-radius:999px;padding:9px 14px;background:#4250af;color:#fff;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.3);font:inherit}

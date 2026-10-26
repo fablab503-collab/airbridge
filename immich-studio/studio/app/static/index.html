@@ -232,6 +232,14 @@ pre { white-space: pre-wrap; font-size: 13px; margin: 0; }
       <input type="file" id="imp-file" multiple>
       <div id="imp-out" class="muted"></div>
     </div>
+    <div class="card">
+      <h2>Your logo</h2>
+      <p class="muted">Replaces the Immich logo, the browser-tab icon and the home-screen icon on <b>your</b> Immich (admin only). PNG with a transparent background works best.</p>
+      <div class="row"><input type="file" id="logo-file" accept="image/*"><input type="text" id="logo-name" placeholder="Name instead of “Immich” (optional)"></div>
+      <div class="row"><button class="btn primary" id="logo-save">Use this logo</button><button class="btn" id="logo-reset">Back to Immich logo</button></div>
+      <div class="row"><img id="logo-preview" alt="" style="max-height:60px"></div>
+      <div id="logo-out" class="muted"></div>
+    </div>
   </section>
 </main>
 <script>
@@ -497,6 +505,21 @@ $("#imp-file").onchange = async (e) => {
     catch (err) { $("#imp-out").lastElementChild.innerHTML = `<span class="bad">${f.name}: ${err.message}</span>`; }
   }
 };
+
+// logo
+async function showLogo() { const b = await api("brand"); $("#logo-preview").src = b.logo || ""; $("#logo-preview").classList.toggle("hide", !b.logo); if (b.name) $("#logo-name").value = b.name; }
+$("#logo-save").onclick = async () => {
+  const fd = new FormData();
+  if ($("#logo-file").files[0]) fd.append("file", $("#logo-file").files[0]);
+  fd.append("name", $("#logo-name").value);
+  try { await api("brand", { method: "POST", body: fd }); $("#logo-out").textContent = "Saved. Reload Immich to see it."; showLogo(); }
+  catch (e) { $("#logo-out").innerHTML = `<span class="bad">${e.message}</span>`; }
+};
+$("#logo-reset").onclick = async () => {
+  const fd = new FormData(); fd.append("reset", "1");
+  await api("brand", { method: "POST", body: fd }); $("#logo-out").textContent = "Back to the Immich logo."; showLogo();
+};
+showLogo().catch(() => {});
 
 // start
 if (window.top !== window) { // opened inside Immich's Studio panel, which has its own close button
