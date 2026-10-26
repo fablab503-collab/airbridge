@@ -469,26 +469,29 @@ BRAND_DIR = os.path.join(DATA_DIR, "brand")
 @app.get("/api/brand")
 def brand():
     """Public on purpose: the login page shows the logo before anyone is logged in."""
-    path = os.path.join(BRAND_DIR, "logo.png")
+    svg, png = os.path.join(BRAND_DIR, "logo.svg"), os.path.join(BRAND_DIR, "logo.png")
+    path = svg if os.path.exists(svg) else png  # a vector logo stays sharp at every size
     if not os.path.exists(path):
         return {"logo": None}
     meta = json.load(open(os.path.join(BRAND_DIR, "brand.json"))) if os.path.exists(os.path.join(BRAND_DIR, "brand.json")) else {}
-    return {"logo": f"api/brand/logo.png?v={int(os.path.getmtime(path))}", "name": meta.get("name")}
+    return {"logo": f"api/brand/{os.path.basename(path)}?v={int(os.path.getmtime(path))}", "name": meta.get("name")}
+
+
+BRAND_FILES = {"logo.svg": "image/svg+xml", "app-icon.svg": "image/svg+xml", "logo.png": "image/png",
+               "icon-180.png": "image/png", "icon-512.png": "image/png", "favicon-32.png": "image/png"}
 
 
 @app.get("/api/brand/{name}")
 def brand_file(name: str):
-    if name not in ("logo.png", "icon-180.png", "icon-512.png", "favicon-32.png"):
-        raise HTTPException(404)
     path = os.path.join(BRAND_DIR, name)
-    if not os.path.exists(path):
+    if name not in BRAND_FILES or not os.path.exists(path):
         raise HTTPException(404)
-    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
+    return FileResponse(path, media_type=BRAND_FILES[name], headers={"Cache-Control": "public, max-age=300"})
 
 
 @app.post("/api/brand")
 async def set_brand(request: Request, file: UploadFile | None = File(None)):
-    """Admin only: upload your own logo (any image format) and optionally a name to show instead of "Immich"."""
+    """Admin only: upload your own logo (any image format, SVG kept as vector) and optionally a name."""
     im = immich_for(request)
     if not im._req("GET", "/users/me").json().get("isAdmin"):
         raise HTTPException(403, "Only the Immich admin can change the logo.")
@@ -501,32 +504,54 @@ async def set_brand(request: Request, file: UploadFile | None = File(None)):
         return {"logo": None}
     if file is not None:
         data = await file.read()
-        name = file.filename or "logo.png"
-        _save_logo(Image.open(io.BytesIO(data)) if name.lower().endswith(".png") else formats.open_any(data, name))
+        name = (file.filename or "logo.png").lower()
+        for old in ("logo.svg", "app-icon.svg"):
+            if os.path.exists(os.path.join(BRAND_DIR, old)):
+                os.remove(os.path.join(BRAND_DIR, old))
+        if name.endswith(".svg"):
+            _save_svg_logo(data)
+        else:
+            _save_logo(Image.open(io.BytesIO(data)) if name.endswith(".png") else formats.open_any(data, name))
     name = (form.get("name") or "").strip()[:40]
     json.dump({"name": name or None}, open(os.path.join(BRAND_DIR, "brand.json"), "w"))
     return brand()
 
 
-def _save_logo(img: Image.Image):
+def _save_logo(img: Image.Image, app_icon: Image.Image | None = None):
     img = img.convert("RGBA")
     img.thumbnail((1200, 400))
     img.save(os.path.join(BRAND_DIR, "logo.png"))
-    # square icons (browser tab, iPhone home screen): logo centred on a white background
-    side = max(img.size)
-    square = Image.new("RGBA", (side, side), (255, 255, 255, 255))
-    square.paste(img, ((side - img.width) // 2, (side - img.height) // 2), img)
+    if app_icon is None:  # square icons (browser tab, home screen): logo centred on white
+        side = max(img.size)
+        app_icon = Image.new("RGBA", (side, side), (255, 255, 255, 255))
+        app_icon.paste(img, ((side - img.width) // 2, (side - img.height) // 2), img)
     for size, name in ((180, "icon-180.png"), (512, "icon-512.png"), (32, "favicon-32.png")):
-        square.resize((size, size), Image.LANCZOS).save(os.path.join(BRAND_DIR, name))
+        app_icon.resize((size, size), Image.LANCZOS).save(os.path.join(BRAND_DIR, name))
+
+
+def _save_svg_logo(svg: bytes, app_icon_svg: bytes | None = None):
+    import cairosvg
+    open(os.path.join(BRAND_DIR, "logo.svg"), "wb").write(svg)
+    png = Image.open(io.BytesIO(cairosvg.svg2png(bytestring=svg, output_height=400)))
+    icon = None
+    if app_icon_svg:
+        open(os.path.join(BRAND_DIR, "app-icon.svg"), "wb").write(app_icon_svg)
+        icon = Image.open(io.BytesIO(cairosvg.svg2png(bytestring=app_icon_svg, output_width=512))).convert("RGBA")
+    _save_logo(png, icon)
 
 
 def _seed_brand():
     """First start: use the logo and name shipped in brand-default/ (Gimmich) until the admin changes them."""
     src = os.path.join(HERE, "..", "brand-default")
-    if os.path.exists(os.path.join(BRAND_DIR, "brand.json")) or not os.path.exists(os.path.join(src, "logo.png")):
+    if os.path.exists(os.path.join(BRAND_DIR, "brand.json")) or not os.path.isdir(src):
         return
     os.makedirs(BRAND_DIR, exist_ok=True)
-    _save_logo(Image.open(os.path.join(src, "logo.png")))
+    if os.path.exists(os.path.join(src, "logo.svg")):
+        app_icon = os.path.join(src, "app-icon.svg")
+        _save_svg_logo(open(os.path.join(src, "logo.svg"), "rb").read(),
+                       open(app_icon, "rb").read() if os.path.exists(app_icon) else None)
+    else:
+        _save_logo(Image.open(os.path.join(src, "logo.png")))
     shutil.copy(os.path.join(src, "brand.json"), os.path.join(BRAND_DIR, "brand.json"))
 
 

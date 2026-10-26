@@ -14,6 +14,8 @@
         if (img.dataset.studio !== logo) {
           img.src = logo; img.dataset.studio = logo; img.style.objectFit = "contain";
           img.style.aspectRatio = "auto"; img.style.width = "auto"; // Immich draws its logo in a square box on some pages
+          // the login page's big blurred background copy: keep it faint so it doesn't turn grey and muddy
+          if (img.parentElement.className.includes("-z-10")) img.style.opacity = "0.08";
         }
         // the name written next to the logo (Immich's own logo had the word "immich" inside the picture)
         if (b.name && !img.nextElementSibling?.classList.contains("studio-brand-name")) {
@@ -21,7 +23,7 @@
           const span = document.createElement("span");
           span.className = "studio-brand-name";
           span.textContent = b.name;
-          span.style.cssText = `font:600 ${big ? 34 : 26}px system-ui,-apple-system,sans-serif;color:#4250af;margin-left:10px;` +
+          span.style.cssText = `font:500 ${big ? 34 : 26}px Roboto,"Studio Roboto",sans-serif;color:#4250af;margin-left:10px;` +
                                `vertical-align:middle;${big ? "display:block;text-align:center;margin:6px 0 0" : ""}`;
           if (img.parentElement.tagName === "A") img.parentElement.style.display = "flex", img.parentElement.style.alignItems = "center";
           img.after(span);
@@ -30,6 +32,10 @@
       if (b.name && document.title.includes("Immich")) document.title = document.title.replace(/Immich/g, b.name);
     };
     if (b.name) {
+      // Roboto, Android's font, served by Studio itself (no outside font service)
+      const f = document.createElement("style");
+      f.textContent = `@font-face{font-family:"Studio Roboto";font-weight:500;font-display:swap;src:url(${BASE}fonts/roboto-500.woff2) format("woff2")}`;
+      document.head.append(f);
       let meta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
       if (!meta) { meta = document.createElement("meta"); meta.name = "apple-mobile-web-app-title"; document.head.append(meta); }
       meta.content = b.name; // name under the icon on the iPhone home screen
