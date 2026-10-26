@@ -12,5 +12,7 @@ git fetch --depth 1 origin "$COMMIT" && git checkout -f "$COMMIT"
 git apply "$HERE/immich-integration.patch"
 rustup target add wasm32-unknown-unknown
 cargo run build web release
+# Studio serves Graphite under /studio/graphite/, so rebuild the page with relative paths
+(cd frontend && node node_modules/vite/bin/vite.js build --base ./)
 rm -rf "$HERE/dist" && cp -r frontend/dist "$HERE/dist"
 echo "Graphite built into $HERE/dist"

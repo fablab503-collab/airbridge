@@ -75,3 +75,15 @@ index c0b1173..e842af4 100644
 +		editor.errorDialog("Could not open the Immich photo", "Immich Studio could not fetch the photo. Is Immich running?");
 +	}
 +}
+diff --git a/frontend/src/utility-functions/service-worker.ts b/frontend/src/utility-functions/service-worker.ts
+index 3d3b048..9b50c7c 100644
+--- a/frontend/src/utility-functions/service-worker.ts
++++ b/frontend/src/utility-functions/service-worker.ts
+@@ -1,4 +1,7 @@
+ export async function registerServiceWorker() {
++	// Immich Studio serves Graphite in a subfolder of Immich: its offline cache would store Immich's root page, so skip it there
++	if (import.meta.env.BASE_URL !== "/") return;
++
+ 	try {
+ 		const registration = await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
+ 

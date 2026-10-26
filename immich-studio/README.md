@@ -20,7 +20,7 @@ After installing, Immich gets a **✨ Studio** button. On any photo it offers:
 ## Install (next to an existing Immich)
 
 1. Put this `immich-studio` folder inside your `immich-app` folder (next to Immich's `docker-compose.yml`).
-2. Build the Graphite editor once (needs Rust + Node.js, 20–60 min), or skip it — the rest works without it:
+2. A ready-built Graphite editor is included in `graphite/dist`. To rebuild it yourself (needs Rust + Node.js, 20–60 min):
    ```sh
    ./immich-studio/graphite/build.sh
    ```

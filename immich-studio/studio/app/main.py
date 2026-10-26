@@ -289,6 +289,59 @@ def faces(asset_id: str, request: Request):
                        "mesh": None if f.mesh is None else np.round(f.mesh[:, :2], 1).tolist()} for f in found]}
 
 
+def _face_index_path(im: Immich) -> str:
+    uid = im._req("GET", "/users/me").json()["id"]  # one index per Immich user
+    return os.path.join(DATA_DIR, f"faces-{uid}.npz")
+
+
+@app.post("/api/faces/index")
+def index_faces(request: Request):
+    """Fingerprint every face in the library (stronger model + age-ignoring layer)."""
+    im = immich_for(request)
+    path = _face_index_path(im)
+
+    def work(job):
+        photos = im.all_assets(type="IMAGE")
+        rows, embs = [], []
+        for i, a in enumerate(photos):
+            try:
+                img, _ = _load(im, a["id"])
+                for f in lazy("faces").analyze(cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)):
+                    rows.append((a["id"], *[float(v) for v in f.box], f.age))
+                    embs.append(f.embedding)
+            except Exception as e:
+                print("face index failed", a["id"], e)
+            job["progress"] = round(100 * (i + 1) / len(photos))
+        np.savez_compressed(path, rows=np.array(rows, dtype=object), embs=np.array(embs, dtype=np.float32))
+        return {"photos": len(photos), "faces": len(rows)}
+
+    return {"job": run_job("index-faces", work)}
+
+
+@app.post("/api/faces/find")
+async def find_person(request: Request):
+    """Photos of the same person, best match first - also across many years of age difference."""
+    body = await request.json()
+    im = immich_for(request)
+    path = _face_index_path(im)
+    if not os.path.exists(path):
+        raise HTTPException(409, "Build the face index first (Label & train → Index all faces).")
+    idx = np.load(path, allow_pickle=True)
+    img, _ = _load(im, body["asset_id"])
+    faces = lazy("faces").analyze(cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR))
+    face = faces[int(body.get("face", 0))]
+    sims = idx["embs"] @ face.embedding
+    best: dict[str, tuple[float, float]] = {}
+    for (aid, *_box, age), s in zip(idx["rows"], sims):
+        if aid != body["asset_id"] and s > best.get(aid, (-1, 0))[0]:
+            best[aid] = (float(s), float(age))
+    ranked = sorted(best.items(), key=lambda kv: -kv[1][0])[: int(body.get("limit", 30))]
+    return {"age_here": round(face.age, 1),
+            "matches": [{"asset": aid, "similarity": round(s, 3), "age": round(age, 1),
+                         # 0.36 = 1% wrong-person matches on held-out FG-NET people (any age gap)
+                         "likely_same": s >= float(body.get("threshold", 0.36))} for aid, (s, age) in ranked]}
+
+
 # ---------------------------------------------------------------- editing ---
 @app.post("/api/edit/{asset_id}")
 async def edit(asset_id: str, request: Request):

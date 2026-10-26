@@ -208,6 +208,13 @@ pre { white-space: pre-wrap; font-size: 13px; margin: 0; }
       <div id="la-out" class="muted"></div>
     </div>
     <div class="card">
+      <h2>Index all faces</h2>
+      <p class="muted">Needed once for <b>Find at any age</b>. Uses a stronger face model (ArcFace R100) plus a layer trained to ignore ageing.</p>
+      <div class="row"><button class="btn primary" id="index-faces">Index all faces</button></div>
+      <div class="progress hide" id="if-prog"><div></div></div>
+      <div id="if-out" class="muted"></div>
+    </div>
+    <div class="card">
       <h2>Teach it your own labels</h2>
       <p class="muted">In Immich, make albums named <b>Train: Group/Label</b> with about 10 example photos each, e.g.
         <i>Train: Clothing/My school uniform</i> and <i>Train: Clothing/Everyday</i>. Each group needs at least two labels. Then press:</p>
@@ -329,9 +336,25 @@ function drawFaces(d, list = true) {
     g.fillStyle = "#7cf29a"; g.font = "bold 13px system-ui"; g.fillText(`${i + 1}: ~${Math.round(f.age)}`, x1 * sx, y1 * sy - 4);
     if (f.mesh && $("#show-mesh").checked) { g.fillStyle = "rgba(255,230,90,.9)"; for (const [x, y] of f.mesh) g.fillRect(x * sx - 0.75, y * sy - 0.75, 1.5, 1.5); }
   });
-  if (list) $("#faces").innerHTML = d.faces.length ? `<table><tr><th>#</th><th>Age guess</th><th>Group</th><th>Face points</th></tr>` +
-    d.faces.map((f, i) => `<tr><td>${i + 1}</td><td>~${Math.round(f.age)}</td><td>${f.age_group}</td><td>${f.mesh ? f.mesh.length : "–"}</td></tr>`).join("") + "</table>" : '<p class="muted">No faces found.</p>';
+  if (list) $("#faces").innerHTML = d.faces.length ? `<table><tr><th>#</th><th>Age guess</th><th>Group</th><th>Face points</th><th></th></tr>` +
+    d.faces.map((f, i) => `<tr><td>${i + 1}</td><td>~${Math.round(f.age)}</td><td>${f.age_group}</td><td>${f.mesh ? f.mesh.length : "–"}</td>` +
+      `<td><button class="btn" data-find="${i}">Find at any age</button></td></tr>`).join("") + "</table><div id='matches'></div>" : '<p class="muted">No faces found.</p>';
 }
+$("#faces").onclick = async (e) => {
+  const i = e.target.dataset.find; if (i === undefined) return;
+  $("#matches").innerHTML = '<p class="muted">Searching your library…</p>';
+  try {
+    const r = await post("faces/find", { asset_id: current.id, face: +i });
+    const sure = r.matches.filter((m) => m.likely_same);
+    $("#matches").innerHTML = `<p class="muted">${sure.length} photos are likely the same person (about 1 in 100 such matches is wrong). Lower ones are shown for you to check.</p><div class="grid">` +
+      r.matches.map((m) => `<div class="tile" style="${m.likely_same ? "" : "opacity:.45"}"><img src="api/thumb/${m.asset}" data-open="${m.asset}"><span class="badge">${Math.round(m.similarity * 100)}% · ~${Math.round(m.age)} y</span></div>`).join("") + "</div>";
+  } catch (err) { $("#matches").innerHTML = `<p class="bad">${err.message}</p>`; }
+};
+$("#v-photo").addEventListener("click", async (e) => {
+  const id = e.target.dataset?.open; if (!id) return;
+  const a = await fetch("../api/assets/" + id, { credentials: "include" }).then((r) => r.json());
+  openPhoto(a.id, a.originalFileName, a.type);
+});
 $("#find-faces").onclick = async () => { $("#faces").innerHTML = '<p class="muted">Looking for faces…</p>'; try { drawFaces(await api("faces/" + current.id)); } catch (e) { $("#faces").innerHTML = `<p class="bad">${e.message}</p>`; } };
 $("#show-mesh").onchange = () => faceData && drawFaces(faceData, false);
 addEventListener("resize", () => faceData && drawFaces(faceData, false));
@@ -431,6 +454,12 @@ $("#label-all").onclick = async () => {
   try { const { job } = await post("analyze-all"); const j = await waitJob(job, $("#la-prog")); $("#la-out").textContent = `Done: ${j.result.labelled} of ${j.result.total} photos labelled.`; }
   catch (e) { $("#la-out").innerHTML = `<span class="bad">${e.message}</span>`; }
   $("#label-all").disabled = false;
+};
+$("#index-faces").onclick = async () => {
+  $("#index-faces").disabled = true;
+  try { const { job } = await post("faces/index"); const j = await waitJob(job, $("#if-prog")); $("#if-out").textContent = `Done: ${j.result.faces} faces in ${j.result.photos} photos.`; }
+  catch (e) { $("#if-out").innerHTML = `<span class="bad">${e.message}</span>`; }
+  $("#index-faces").disabled = false;
 };
 $("#train").onclick = async () => {
   $("#train").disabled = true; $("#train-out").textContent = "Training…";

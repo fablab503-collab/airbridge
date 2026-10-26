@@ -188,10 +188,29 @@ class FaceMesh:
         return [np.array([[p.x * w, p.y * h, p.z * w] for p in lm], dtype=np.float32) for lm in res.face_landmarks]
 
 
+class AgeInvariant:
+    """Extra layer trained on FG-NET (same people at ages 0-69) that keeps the parts of the
+    face fingerprint that stay the same as people grow up (eval/train_age_invariant.py)."""
+
+    def __init__(self, path: str | None = None):
+        path = path or os.path.join(MODEL_DIR, "age_invariant_antelopev2.pkl")
+        self.model = pickle.load(open(path, "rb")) if os.path.exists(path) else None
+
+    def __call__(self, embeddings: np.ndarray) -> np.ndarray:
+        if self.model is None:
+            return embeddings
+        z = self.model.transform(embeddings)
+        return z / np.linalg.norm(z, axis=1, keepdims=True)
+
+
 class FacePipeline:
     def __init__(self, with_mesh: bool = False):
         self.detector = FaceDetector()
-        self.recognizer = FaceRecognizer()
+        # antelopev2 (ArcFace R100) recognised people across ages better than Immich's default R50
+        strong = os.path.join(MODEL_DIR, "antelopev2", "glintr100.onnx")
+        self.recognizer = FaceRecognizer(strong if os.path.exists(strong) else None)
+        self.age_invariant = AgeInvariant()
+        self.age_recognizer = FaceRecognizer() if os.path.exists(strong) else self.recognizer
         self.genderage = GenderAge()
         self.age_head = AgeHead()
         self.mesh = FaceMesh() if with_mesh else None
@@ -200,8 +219,9 @@ class FacePipeline:
         faces = [f for f in self.detector.detect(img_bgr) if f.score >= min_score]
         if not faces:
             return faces
-        embs = self.recognizer.embed([align(img_bgr, f.kps) for f in faces])
-        ages = self.age_head.predict(embs)
+        crops = [align(img_bgr, f.kps) for f in faces]
+        embs = self.age_invariant(self.recognizer.embed(crops))
+        ages = self.age_head.predict(self.age_recognizer.embed(crops)) if self.age_head.model else None
         for i, f in enumerate(faces):
             f.embedding = embs[i]
             ga_age, f.sex = self.genderage.predict(img_bgr, f.box)
