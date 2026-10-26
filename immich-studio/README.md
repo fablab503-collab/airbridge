@@ -3,21 +3,24 @@
 Extra AI tools that plug into [Immich](https://immich.app) (the self-hosted photo app).
 Everything runs on your own computer, and every model is open source.
 
+Studio is **one Rust program** (`studio/`): a web server (axum + tokio) that runs every tool below on parallel
+threads — file formats, editing, printing, AI labels, faces and speech-to-text — next to Immich.
+
 After installing, Immich gets a **✨ Studio** button. On any photo it offers:
 
 | Tool | What it does | Open-source parts |
 |---|---|---|
 | **AI labels** | Tags each photo with environment (42 kinds of place, including prison), indoors/outdoors, light, number of people, era/decade, age group of each face, and clothing (type, colour, style). The tags become normal Immich tags, so Immich search finds them. | SigLIP2 (through Immich's own ML server), InsightFace, our trained models |
-| **Teach your own labels** | Make albums named `Train: Group/Label` (e.g. `Train: Clothing/School uniform`) with ~10 photos each, press *Train*. | scikit-learn |
-| **Faces** | Finds faces, guesses age, maps **584 points** per face (478-point 3D mesh + 106-point outline), finds the same person at any age with certain / likely / unsure levels, and learns your people from ✓ / ✗ answers. | InsightFace SCRFD + ArcFace R100 + 2d106det, MediaPipe Face Landmarker, our trained layers |
-| **Edit** | Brightness, contrast, colour, exposure, warm/cool, hue, sharpness, rotate, mirror, crop, black & white, sepia, auto-fix and **change one colour** (e.g. red shirt → blue). Save as a new photo or replace the original; delete photos. | Pillow, NumPy |
+| **Teach your own labels** | Make albums named `Train: Group/Label` (e.g. `Train: Clothing/School uniform`) with ~10 photos each, press *Train*. | our own trainer (same maths as scikit-learn) |
+| **Faces** | Finds faces, guesses age, maps **584 points** per face (478-point 3D mesh + 106-point outline), finds the same person at any age with certain / likely / unsure levels, and learns your people from ✓ / ✗ answers. | InsightFace SCRFD + ArcFace R100 + 2d106det, MediaPipe face mesh, our trained layers, all on ONNX Runtime |
+| **Edit** | Brightness, contrast, colour, exposure, warm/cool, hue, sharpness, rotate, mirror, crop, black & white, sepia, auto-fix and **change one colour** (e.g. red shirt → blue). Save as a new photo or replace the original; delete photos. | Rust `image` (same maths as Pillow) |
 | **Graphite** | Opens the photo in [Graphite](https://graphite.art), a full editor written in Rust (layers, drawing, text, filters). *File → Export* saves the result straight back into Immich. | Graphite (Apache-2.0) + a small patch |
-| **Any file format** | Imports RAW (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 …), HEIC, AVIF, JPEG XL, PSD, SVG, PDF, EXR, HDR, TGA, ICO, DDS, QOI, XPM … Formats Immich can't show are converted to full-quality TIFF. | LibRaw (rawpy), libheif, psd-tools, CairoSVG, PDFium, ImageMagick, ffmpeg |
-| **Print** | Shows the print quality (DPI) for A6 … A0, upscales with AI when needed, makes a print-ready PDF at the exact paper size (optional crop marks). RAW files are developed at full resolution for printing. | Real-ESRGAN (BSD-3), ReportLab |
-| **Photo book** | Turns an album into a PDF book (cover + 1, 2 or 4 photos per page with date/place captions). | ReportLab |
+| **Any file format** | Imports RAW (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 …), HEIC, AVIF, JPEG XL, PSD, SVG, PDF, EXR, HDR, TGA, ICO, DDS, QOI, XPM … Formats Immich can't show are converted to full-quality TIFF. | rawler, libheif, jxl-oxide, psd, resvg, ImageMagick, ffmpeg, Poppler |
+| **Print** | Shows the print quality (DPI) for A6 … A0, upscales with AI when needed, makes a print-ready PDF at the exact paper size (optional crop marks). RAW files are developed at full resolution for printing. | Real-ESRGAN (BSD-3), pdf-writer |
+| **Photo book** | Turns an album into a PDF book (cover + 1, 2 or 4 photos per page with date/place captions). | pdf-writer |
 | **Camera** (phones, tablets, computers) | A camera app at `/studio/camera/` (also in the ✨ menu). Photos and videos go **straight into Immich** (album *Studio Camera*) and are **never saved on the phone**. If the connection drops they wait in memory and upload when it's back. Front/back camera, zoom and light where the phone supports them. "Add to Home Screen" makes it an app icon. | Web standard camera + MediaRecorder |
-| **Your logo** | Comes set up as **Gimmich**: vector logo `studio/brand-default/logo.svg`, square app icon `app-icon.svg`, logo with the name `logo-with-name.svg`, name in Roboto (Android's font, SIL Open Font License, served by Studio itself). Studio → *Import any file* → *Your logo*: replaces the Immich logo, browser-tab icon and home-screen icon on your own Immich (admin only), optionally with your own name. *Back to Immich logo* undoes it. | Pillow |
-| **Video to text** | Writes down what people say in a video (Whisper), puts it in the video's description (so Immich search finds it) and makes subtitles (.srt). | faster-whisper (MIT) |
+| **Your logo** | Comes set up as **Gimmich**: vector logo `studio/brand-default/logo.svg`, square app icon `app-icon.svg`, logo with the name `logo-with-name.svg`, name in Roboto (Android's font, SIL Open Font License, served by Studio itself). Studio → *Import any file* → *Your logo*: replaces the Immich logo, browser-tab icon and home-screen icon on your own Immich (admin only), optionally with your own name. *Back to Immich logo* undoes it. | resvg, Rust `image` |
+| **Video to text** | Writes down what people say in a video (Whisper), puts it in the video's description (so Immich search finds it) and makes subtitles (.srt). | whisper.cpp + Silero voice detector (MIT) |
 
 ## Install
 
@@ -118,7 +121,7 @@ tested only on photos that were *not* confirmed (`eval/learn_from_confirmations_
 
 **Face points:** MediaPipe's 478-point 3D mesh + InsightFace's 106-point outline = **584 points per face**.
 
-**Everything else** — `studio/tests/test_formats.py`: 32 of 32 sample files (24 formats + RAW from Canon CR2/CR3,
+**Everything else** — `gimmich-studio check-formats`: 32 of 32 sample files (24 formats + RAW from Canon CR2/CR3,
 Nikon, Sony, Fujifilm, Panasonic, Olympus, iPhone DNG). `studio/tests/test_api.py`: 16 of 16 end-to-end checks
 (print + AI upscale, photo book, edit/save/delete, RAW/EXR import, Graphite export back to Immich, Whisper transcript, faces).
 `studio/tests/camera_devices.js`: camera on 10 device profiles (iPhone 15 Pro Max, iPhone 14, iPad Pro 11, iPad Mini, Pixel 8,
@@ -136,13 +139,13 @@ engine still needs a check on a real iPhone.
 * A grid of face points (the 478-point mesh) is great for drawing and measuring a face, but on its own it identifies people
   much worse than ArcFace "face fingerprints" — see the table. Studio uses the mesh for display and ArcFace for identity.
 * The "ignore ageing" layer learned from only 82 people (FG-NET). It helped on held-out people, but may help less
-  for faces unlike FG-NET's. Delete `trained/age_invariant_antelopev2.pkl` to switch it off.
+  for faces unlike FG-NET's. Delete `age_invariant.json` from the models volume to switch it off.
 * Age and era are estimates. Clothing labels are judged on the area under each face; the clothing models learned
   from product photos, so they can be less accurate on everyday snapshots.
 * AI upscaling invents plausible detail; it can't recover detail that was never captured. Above ×4 the result gets soft.
 * Licences of the training data: the Era model learned from `tonyassi/fashion-decade-images-1` and the clothing
   models from `ashraq/fashion-product-images-small`; neither states a licence, so keep those models for personal use.
-  Without `trained/label_heads.pkl` Studio falls back to zero-shot labels.
+  Without `label_heads.json` Studio falls back to zero-shot labels.
 
 ## Files
 
@@ -150,17 +153,22 @@ engine still needs a check on a real iPhone.
 immich-studio/
   docker-compose.studio.yml   adds Studio + gateway to Immich
   gateway/nginx.conf          one address for Immich + Studio; adds the ✨ button to Immich pages
-  studio/                     the Studio app (Python, FastAPI)
-    app/main.py               web API
-    app/labels.py             label groups (environment, era, clothing …)
-    app/faces.py              face finding, recognition, age, 478-point mesh
-    app/editor.py             photo edits
-    app/formats.py            reading every file format
-    app/printing.py           DPI check, AI upscaling, print and book PDFs
-    app/video.py              Whisper speech to text
-    app/static/               Studio web page + the script added to Immich
-    trained/                  small models we trained (environment, era, age)
-    tests/                    format test + end-to-end test
+  studio/                     the Studio: one Rust program (see studio/README.md)
+    src/main.rs               start-up, settings, helper commands
+    src/routes.rs             photos, jobs, logo, Connect a device, camera upload
+    src/tools.rs              import, edit, Graphite return, print, photo book
+    src/ai.rs                 AI labels, faces, face index, find a person, training
+    src/labels.rs             label groups (environment, era, clothing …)
+    src/faces.rs              face finding, recognition, age, 106 + 478 face points
+    src/learn.rs              training: label heads and the "ignore ageing" layer
+    src/editor.rs             photo edits
+    src/formats.rs            reading every file format
+    src/printing.rs           DPI check, AI upscaling, print and book PDFs
+    src/video.rs              Whisper speech to text
+    static/                   Studio web pages + the script added to Immich
+    trained/                  small models we trained (environment, era, age, face layer, face mesh)
+    tests/                    end-to-end test + camera device test
   graphite/                   Graphite patch + build script
-  eval/                       training + testing scripts behind the numbers above
+  eval/                       training + testing scripts behind the numbers above (Python, offline only;
+                              export_trained.py turns their results into the files in studio/trained/)
 ```

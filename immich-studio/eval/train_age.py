@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2, numpy as np, pyarrow.parquet as pq, requests
 from sklearn.linear_model import RidgeCV
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "studio"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "pystudio"))
 utk_path, fgnet_dir, model_dir, ml_url, out_dir = sys.argv[1:6]
 os.environ["STUDIO_MODEL_DIR"] = model_dir
 from app.faces import FaceDetector, FaceRecognizer, GenderAge, align  # noqa: E402

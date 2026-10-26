@@ -14,10 +14,12 @@ services:
 
   immich-studio:
     container_name: immich_studio
+    # One Rust program. The first build compiles it (about 10-20 minutes); later starts are instant.
     build:
       context: ./immich-studio/studio
       args:
-        BASE: ${STUDIO_BASE_IMAGE:-python:3.13-slim}
+        BUILD_IMAGE: ${STUDIO_BUILD_IMAGE:-rust:1-trixie}
+        RUNTIME_IMAGE: ${STUDIO_RUNTIME_IMAGE:-debian:trixie-slim}
     volumes:
       - studio-models:/models
       - studio-data:/data

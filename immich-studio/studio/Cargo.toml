@@ -1,5 +1,5 @@
 [package]
-name = "studio-rs"
+name = "gimmich-studio"
 version = "0.1.0"
 edition = "2021"
 description = "Gimmich Studio in Rust: one program that runs every Studio tool on parallel threads"
@@ -26,6 +26,7 @@ pdf-writer = "0.13"
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["load-dynamic", "ndarray"] }
 ndarray = "0.16"
 rayon = "1"
+whisper-rs = "0.16"
 nalgebra = { version = "0.33", default-features = false, features = ["std"] }
 tempfile = "3"
 resvg = "0.45"

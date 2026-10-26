@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "studio"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "pystudio"))
 places_dir, ml_url, out_dir = sys.argv[1:4]
 per_label = int(sys.argv[4]) if len(sys.argv) > 4 else 60
 os.environ["IMMICH_ML_URL"] = ml_url

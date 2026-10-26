@@ -90,7 +90,7 @@ fetch_studio "${GIMMICH_REF:-main}" || fetch_studio "$FALLBACK_REF" || fail "Cou
 ok "Downloaded"
 
 COMPOSE=(docker compose -f docker-compose.yml -f immich-studio/docker-compose.studio.yml --env-file .env --env-file .env.gimmich)
-info "Starting (the first time downloads about 3 GB and takes 5-15 minutes)..."
+info "Starting (the first time downloads about 3 GB and builds the Studio: 15-30 minutes)..."
 "${COMPOSE[@]}" up -d --build --remove-orphans
 for _ in $(seq 1 200); do curl -fs "http://localhost:$GIMMICH_PORT/api/server/ping" >/dev/null 2>&1 && break; sleep 3; done
 curl -fs "http://localhost:$GIMMICH_PORT/api/server/ping" >/dev/null 2>&1 || fail "Gimmich didn't start. See: cd $GIMMICH_DIR && ${COMPOSE[*]} logs"
@@ -117,7 +117,8 @@ if [ -z "${SKIP_TAILSCALE:-}" ] && have tailscale; then
     sudo tailscale up || tailscale up || true
   fi
   if tailscale serve --bg "$GIMMICH_PORT" >/dev/null 2>&1 || sudo tailscale serve --bg "$GIMMICH_PORT" >/dev/null 2>&1; then
-    NAME="$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || true)"
+    # this computer's name comes first in the status ("Self"), before the other devices
+    NAME="$(tailscale status --json 2>/dev/null | grep -o '"DNSName": *"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/; s/\.$//')"
     [ -n "$NAME" ] && ADDRESS="https://$NAME"
   else
     info "Tailscale HTTPS is off. Turn on 'MagicDNS' and 'HTTPS Certificates' at https://login.tailscale.com/admin/dns"

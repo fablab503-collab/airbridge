@@ -1,9 +1,8 @@
 //! Gimmich Studio, in Rust.
 //!
-//! One program that serves the Studio page and its API. Requests run concurrently on tokio's
-//! threads; heavy picture work runs on blocking worker threads. Routes not ported to Rust yet are
-//! passed through unchanged to the Python Studio (STUDIO_PY_URL), so everything keeps working
-//! while pieces move over one at a time.
+//! One program that serves the Studio pages and its API: photos, file formats, editing, printing,
+//! photo books, AI labels, faces, video speech-to-text, logo and device setup. Requests run
+//! concurrently on tokio's threads; heavy picture and AI work runs on blocking worker threads.
 
 mod ai;
 mod brand;
@@ -16,9 +15,9 @@ mod jobs;
 mod labels;
 mod learn;
 mod printing;
-mod proxy;
 mod routes;
 mod tools;
+mod video;
 
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
@@ -28,7 +27,6 @@ use tower_http::services::ServeDir;
 pub struct Config {
     pub immich_url: String,
     pub api_key: Option<String>,
-    pub py_url: Option<String>,
     pub data_dir: PathBuf,
     pub static_dir: PathBuf,
     pub graphite_dir: PathBuf,
@@ -47,9 +45,8 @@ impl Config {
         Self {
             immich_url: var("IMMICH_URL").unwrap_or_else(|| "http://immich-server:2283".into()),
             api_key: var("IMMICH_API_KEY"),
-            py_url: var("STUDIO_PY_URL"),
             data_dir: path("STUDIO_DATA_DIR", "/data"),
-            static_dir: path("STUDIO_STATIC_DIR", "/srv/app/static"),
+            static_dir: path("STUDIO_STATIC_DIR", "/srv/static"),
             graphite_dir: path("STUDIO_GRAPHITE_DIR", "/graphite"),
             downloads_dir: path("STUDIO_DOWNLOADS_DIR", "/downloads"),
             brand_default_dir: path("STUDIO_BRAND_DEFAULT_DIR", "/srv/brand-default"),
@@ -70,7 +67,7 @@ pub struct AppState {
 
 pub type State = Arc<AppState>;
 
-/// `studio-rs check-formats DIR...`: open every file and check a real picture comes out.
+/// `gimmich-studio check-formats DIR...`: open every file and check a real picture comes out.
 fn check_formats(dirs: &[String]) -> anyhow::Result<()> {
     let (mut ok, mut bad) = (0, 0);
     for d in dirs {
@@ -109,27 +106,27 @@ async fn main() -> anyhow::Result<()> {
         return check_formats(&args[2..]);
     }
     if args.get(1).map(String::as_str) == Some("convert") && (4..=5).contains(&args.len()) {
-        // `studio-rs convert IN OUT.jpg [QUALITY]`: read any format, write a JPEG (for checking by eye)
+        // `gimmich-studio convert IN OUT.jpg [QUALITY]`: read any format, write a JPEG (for checking by eye)
         let img = formats::open_any(&std::fs::read(&args[2])?, &args[2])?;
         let q = args.get(4).and_then(|q| q.parse().ok());
         std::fs::write(&args[3], formats::to_jpeg(&img, if q.is_some() { None } else { Some(2000) }, q.unwrap_or(90))?)?;
         return Ok(());
     }
     if args.get(1).map(String::as_str) == Some("edit") && args.len() == 5 {
-        // `studio-rs edit IN OUT.png '[steps]'`: run edit steps (for comparing with the Python Studio)
+        // `gimmich-studio edit IN OUT.png '[steps]'`: run edit steps (for comparing with the Python Studio)
         let img = formats::open_any(&std::fs::read(&args[2])?, &args[2])?;
         let steps: Vec<serde_json::Value> = serde_json::from_str(&args[4])?;
         editor::apply(img, &steps)?.save(&args[3])?;
         return Ok(());
     }
     if args.get(1).map(String::as_str) == Some("upscale") && args.len() == 5 {
-        // `studio-rs upscale IN OUT.png 2|4`: AI upscale (for comparing with the Python Studio)
+        // `gimmich-studio upscale IN OUT.png 2|4`: AI upscale (for comparing with the Python Studio)
         let img = formats::open_any(&std::fs::read(&args[2])?, &args[2])?;
         printing::upscale(&img, args[4].parse()?, |_| {})?.save(&args[3])?;
         return Ok(());
     }
     if args.get(1).map(String::as_str) == Some("faces") && args.len() >= 3 {
-        // `studio-rs faces IMG...`: face results as JSON lines (for comparing with the Python Studio)
+        // `gimmich-studio faces IMG...`: face results as JSON lines (for comparing with the Python Studio)
         let dir = Config::from_env().model_dir;
         let p = faces::FacePipeline::load(&dir)?;
         for f in &args[2..] {
@@ -143,7 +140,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     if args.get(1).map(String::as_str) == Some("train-age-invariant") && args.len() == 4 {
-        // `studio-rs train-age-invariant TRAINED_DIR OUT.json`: the layer from FG-NET only (for checking)
+        // `gimmich-studio train-age-invariant TRAINED_DIR OUT.json`: the layer from FG-NET only (for checking)
         let dir = std::path::Path::new(&args[2]);
         let meta: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join("fgnet_antelopev2.json"))?)?;
         let dim = meta["dim"].as_u64().unwrap_or(512) as usize;
@@ -155,10 +152,16 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     if args.get(1).map(String::as_str) == Some("train-logistic") && args.len() == 5 {
-        // `studio-rs train-logistic X.json Y.json OUT.json`: label training on given numbers (for checking)
+        // `gimmich-studio train-logistic X.json Y.json OUT.json`: label training on given numbers (for checking)
         let x: Vec<Vec<f32>> = serde_json::from_slice(&std::fs::read(&args[2])?)?;
         let y: Vec<String> = serde_json::from_slice(&std::fs::read(&args[3])?)?;
         std::fs::write(&args[4], serde_json::to_vec(&learn::logistic_regression(&x, &y, 5.0)?)?)?;
+        return Ok(());
+    }
+    if args.get(1).map(String::as_str) == Some("transcribe") && args.len() == 3 {
+        // `gimmich-studio transcribe VIDEO`: speech to text (for checking)
+        let res = video::transcribe(&std::fs::read(&args[2])?, &args[2], &Config::from_env().model_dir)?;
+        println!("{}", serde_json::to_string_pretty(&res)?);
         return Ok(());
     }
     tracing_subscriber::fmt().with_env_filter(
@@ -181,10 +184,7 @@ async fn main() -> anyhow::Result<()> {
 
     let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8000);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    tracing::info!(
-        "Gimmich Studio (Rust) on {addr}; not-yet-ported routes -> {}",
-        state.cfg.py_url.as_deref().unwrap_or("(none)")
-    );
+    tracing::info!("Gimmich Studio on {addr}");
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
     Ok(())
 }

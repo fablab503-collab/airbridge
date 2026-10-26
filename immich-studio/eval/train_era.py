@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np, pyarrow.parquet as pq
 from sklearn.linear_model import LogisticRegression
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "studio"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "pystudio"))
 pq_dir, ml_url, out_dir = sys.argv[1:4]
 os.environ["IMMICH_ML_URL"] = ml_url
 from app import clip, formats  # noqa: E402

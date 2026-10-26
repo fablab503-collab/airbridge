@@ -16,7 +16,7 @@ import glob, os, re, sys
 
 import cv2, numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "studio"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "pystudio"))
 fg_dir, model_dir, out_dir = sys.argv[1:4]
 os.environ["STUDIO_MODEL_DIR"] = model_dir
 from app.faces import FaceRecognizer  # noqa: E402

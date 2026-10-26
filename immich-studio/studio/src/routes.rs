@@ -1,8 +1,8 @@
-//! Studio API routes handled in Rust. Everything else under /api/ goes to the Python Studio.
+//! Studio API routes: photos, jobs, logo, Connect a device, camera; the tools and AI live in their own files.
 
 use axum::{
     body::Body,
-    extract::{Multipart, Path, Query, Request, State},
+    extract::{Multipart, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{any, delete, get, post},
@@ -11,7 +11,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::{ai, brand, formats, immich::{status_of, Immich}, proxy, tools, State as AppState};
+use crate::{ai, brand, formats, immich::{status_of, Immich}, tools, video, State as AppState};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -42,7 +42,9 @@ pub fn router() -> Router<AppState> {
         .route("/api/faces/confirm", post(ai::confirm_face))
         .route("/api/faces/learn", post(ai::learn_faces))
         .route("/api/faces/{id}", get(ai::faces))
-        .route("/api/{*rest}", any(proxy::to_python))
+        .route("/api/video/{id}/transcribe", post(video::transcribe_route))
+        .route("/api/video/{id}/subtitles.srt", get(video::subtitles))
+        .route("/api/{*rest}", any(not_found))
 }
 
 // ------------------------------------------------------------------ errors ---
@@ -83,8 +85,11 @@ pub fn immich_for(st: &AppState, headers: &HeaderMap) -> ApiResult<Immich> {
 
 // ------------------------------------------------------------------ photos ---
 async fn health(State(st): State<AppState>) -> Json<Value> {
-    Json(json!({ "ok": true, "engine": "rust", "graphite": st.cfg.graphite_dir.join("index.html").exists(),
-                 "python_fallback": st.cfg.py_url.is_some() }))
+    Json(json!({ "ok": true, "engine": "rust", "graphite": st.cfg.graphite_dir.join("index.html").exists() }))
+}
+
+async fn not_found() -> ApiError {
+    err(StatusCode::NOT_FOUND, "Not Found")
 }
 
 async fn me(State(st): State<AppState>, h: HeaderMap) -> ApiResult<Json<Value>> {
@@ -154,21 +159,15 @@ async fn delete_asset(State(st): State<AppState>, h: HeaderMap, Path(id): Path<S
 }
 
 // -------------------------------------------------------------------- jobs ---
-async fn job(State(st): State<AppState>, Path(id): Path<String>, req: Request) -> Response {
-    match st.jobs.describe(&id) {
-        Some(v) => Json(v).into_response(),
-        None => proxy::to_python(State(st), req).await, // a job started by the Python Studio
-    }
+async fn job(State(st): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    st.jobs.describe(&id).map(Json).ok_or_else(|| err(StatusCode::NOT_FOUND, "Not Found"))
 }
 
-async fn job_file(State(st): State<AppState>, Path(id): Path<String>, req: Request) -> Response {
-    match st.jobs.get(&id) {
-        Some(j) => match (j.status, j.file) {
-            ("done", Some((data, media, name))) => ([(header::CONTENT_TYPE, media),
-                (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{name}\""))], data).into_response(),
-            _ => StatusCode::NOT_FOUND.into_response(),
-        },
-        None => proxy::to_python(State(st), req).await,
+async fn job_file(State(st): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
+    match st.jobs.get(&id).map(|j| (j.status, j.file)) {
+        Some(("done", Some((data, media, name)))) => Ok(([(header::CONTENT_TYPE, media),
+            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{name}\""))], data).into_response()),
+        _ => Err(err(StatusCode::NOT_FOUND, "Not Found")),
     }
 }
 
