@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import os
 import threading
 import traceback
@@ -496,22 +497,40 @@ async def set_brand(request: Request, file: UploadFile | None = File(None)):
     if form.get("reset"):
         for f in os.listdir(BRAND_DIR):
             os.remove(os.path.join(BRAND_DIR, f))
+        json.dump({"name": None}, open(os.path.join(BRAND_DIR, "brand.json"), "w"))  # stay on Immich's logo
         return {"logo": None}
     if file is not None:
-        img = formats.open_any(await file.read(), file.filename or "logo.png") if not (file.filename or "").lower().endswith(".png") \
-            else Image.open(io.BytesIO(await file.read()))
-        img = img.convert("RGBA")
-        img.thumbnail((1200, 400))
-        img.save(os.path.join(BRAND_DIR, "logo.png"))
-        # square icons (browser tab, iPhone home screen): logo centred on its own background
-        side = max(img.size)
-        square = Image.new("RGBA", (side, side), (255, 255, 255, 255))
-        square.paste(img, ((side - img.width) // 2, (side - img.height) // 2), img)
-        for size, name in ((180, "icon-180.png"), (512, "icon-512.png"), (32, "favicon-32.png")):
-            square.resize((size, size), Image.LANCZOS).save(os.path.join(BRAND_DIR, name))
+        data = await file.read()
+        name = file.filename or "logo.png"
+        _save_logo(Image.open(io.BytesIO(data)) if name.lower().endswith(".png") else formats.open_any(data, name))
     name = (form.get("name") or "").strip()[:40]
     json.dump({"name": name or None}, open(os.path.join(BRAND_DIR, "brand.json"), "w"))
     return brand()
+
+
+def _save_logo(img: Image.Image):
+    img = img.convert("RGBA")
+    img.thumbnail((1200, 400))
+    img.save(os.path.join(BRAND_DIR, "logo.png"))
+    # square icons (browser tab, iPhone home screen): logo centred on a white background
+    side = max(img.size)
+    square = Image.new("RGBA", (side, side), (255, 255, 255, 255))
+    square.paste(img, ((side - img.width) // 2, (side - img.height) // 2), img)
+    for size, name in ((180, "icon-180.png"), (512, "icon-512.png"), (32, "favicon-32.png")):
+        square.resize((size, size), Image.LANCZOS).save(os.path.join(BRAND_DIR, name))
+
+
+def _seed_brand():
+    """First start: use the logo and name shipped in brand-default/ (Gimmich) until the admin changes them."""
+    src = os.path.join(HERE, "..", "brand-default")
+    if os.path.exists(os.path.join(BRAND_DIR, "brand.json")) or not os.path.exists(os.path.join(src, "logo.png")):
+        return
+    os.makedirs(BRAND_DIR, exist_ok=True)
+    _save_logo(Image.open(os.path.join(src, "logo.png")))
+    shutil.copy(os.path.join(src, "brand.json"), os.path.join(BRAND_DIR, "brand.json"))
+
+
+_seed_brand()
 
 
 # ----------------------------------------------------------------- camera ---

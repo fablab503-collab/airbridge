@@ -15,9 +15,25 @@
           img.src = logo; img.dataset.studio = logo; img.style.objectFit = "contain";
           img.style.aspectRatio = "auto"; img.style.width = "auto"; // Immich draws its logo in a square box on some pages
         }
+        // the name written next to the logo (Immich's own logo had the word "immich" inside the picture)
+        if (b.name && !img.nextElementSibling?.classList.contains("studio-brand-name")) {
+          const big = img.closest("form, [class*=login], main") && !img.closest("a");
+          const span = document.createElement("span");
+          span.className = "studio-brand-name";
+          span.textContent = b.name;
+          span.style.cssText = `font:600 ${big ? 34 : 26}px system-ui,-apple-system,sans-serif;color:#4250af;margin-left:10px;` +
+                               `vertical-align:middle;${big ? "display:block;text-align:center;margin:6px 0 0" : ""}`;
+          if (img.parentElement.tagName === "A") img.parentElement.style.display = "flex", img.parentElement.style.alignItems = "center";
+          img.after(span);
+        }
       }
       if (b.name && document.title.includes("Immich")) document.title = document.title.replace(/Immich/g, b.name);
     };
+    if (b.name) {
+      let meta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+      if (!meta) { meta = document.createElement("meta"); meta.name = "apple-mobile-web-app-title"; document.head.append(meta); }
+      meta.content = b.name; // name under the icon on the iPhone home screen
+    }
     for (const l of document.querySelectorAll('link[rel*="icon"]')) l.remove();
     for (const [rel, file] of [["icon", "favicon-32.png"], ["apple-touch-icon", "icon-180.png"]]) {
       const l = document.createElement("link"); l.rel = rel; l.href = BASE + "api/brand/" + file; document.head.append(l);

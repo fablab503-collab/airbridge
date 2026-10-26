@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY download_models.sh .
 COPY app ./app
 COPY trained /srv/trained
+COPY brand-default /srv/brand-default
 ENV STUDIO_MODEL_DIR=/models STUDIO_DATA_DIR=/data STUDIO_GRAPHITE_DIR=/graphite \
     IMMICH_URL=http://immich-server:2283 IMMICH_ML_URL=http://immich-machine-learning:3003
 EXPOSE 8000
