@@ -1,0 +1,65 @@
+# Builds the Gimmich desktop app (immich-studio/desktop) for Windows, macOS and Linux.
+# Download the installers from the run's "Artifacts" section on GitHub (Actions tab).
+name: Gimmich desktop
+
+on:
+  push:
+    paths:
+      - "immich-studio/desktop/**"
+      - ".github/workflows/gimmich-desktop.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            args: ""
+          - name: macos
+            os: macos-latest
+            args: "--target universal-apple-darwin" # one app for Apple-silicon and Intel Macs
+          - name: linux
+            os: ubuntu-22.04
+            args: ""
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: immich-studio/desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux libraries
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.name == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Test
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build
+        run: |
+          npm ci
+          npx tauri build ${{ matrix.args }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gimmich-${{ matrix.name }}
+          path: |
+            immich-studio/desktop/src-tauri/target/**/release/bundle/nsis/*.exe
+            immich-studio/desktop/src-tauri/target/**/release/bundle/msi/*.msi
+            immich-studio/desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
+            immich-studio/desktop/src-tauri/target/**/release/bundle/deb/*.deb
+            immich-studio/desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage
+          if-no-files-found: error

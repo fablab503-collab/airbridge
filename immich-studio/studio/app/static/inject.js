@@ -11,11 +11,12 @@
     const logo = BASE + b.logo;
     const swap = () => {
       for (const img of document.querySelectorAll('img[alt="Immich logo"]')) {
+        // the login page's big blurred background copy of the logo: hidden (a photo-like logo turns into grey
+        // smudges there, and Safari/WebKit doesn't blur it)
+        if (img.parentElement.className.includes("-z-10")) { img.style.display = "none"; continue; }
         if (img.dataset.studio !== logo) {
           img.src = logo; img.dataset.studio = logo; img.style.objectFit = "contain";
           img.style.aspectRatio = "auto"; img.style.width = "auto"; // Immich draws its logo in a square box on some pages
-          // the login page's big blurred background copy: keep it faint so it doesn't turn grey and muddy
-          if (img.parentElement.className.includes("-z-10")) img.style.opacity = "0.08";
         }
         // the name written next to the logo (Immich's own logo had the word "immich" inside the picture)
         if (b.name && !img.nextElementSibling?.classList.contains("studio-brand-name")) {

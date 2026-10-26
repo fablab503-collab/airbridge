@@ -507,7 +507,8 @@ $("#imp-file").onchange = async (e) => {
 };
 
 // logo
-async function showLogo() { const b = await api("brand"); $("#logo-preview").src = b.logo || ""; $("#logo-preview").classList.toggle("hide", !b.logo); if (b.name) $("#logo-name").value = b.name; }
+async function showLogo() { const b = await api("brand");
+  if (b.name) { document.querySelector("header h1").textContent = b.name + " Studio"; document.title = b.name + " Studio"; } $("#logo-preview").src = b.logo || ""; $("#logo-preview").classList.toggle("hide", !b.logo); if (b.name) $("#logo-name").value = b.name; }
 $("#logo-save").onclick = async () => {
   const fd = new FormData();
   if ($("#logo-file").files[0]) fd.append("file", $("#logo-file").files[0]);
