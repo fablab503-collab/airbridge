@@ -120,6 +120,11 @@ echo "      ✅ Metal GPU engine ready."
 echo ""
 echo "[4/5] 🧠 Verifying LiquidAI 2.6B model..."
 MODEL_PATH="$TARGET_DIR/models/LFM2.5-2.6B-Q4_K_M.gguf"
+# Older installers could save a small error page here instead of the ~1.6 GB model.
+if [ -f "$MODEL_PATH" ] && [ -n "$(find "$MODEL_PATH" -size -100M)" ]; then
+    echo "      Removing incomplete model file from an earlier install..."
+    rm -f "$MODEL_PATH"
+fi
 if [ ! -f "$MODEL_PATH" ]; then
     if [ -f "$HOME/Library/Application Support/Air Compute Bridge/models/LFM2.5-2.6B-Q4_K_M.gguf" ]; then
         echo "      Reusing model from local installation..."
@@ -140,7 +145,13 @@ if [ -f "$MODEL_PATH" ]; then
     echo "      ✅ Model ready: $MODEL_PATH"
 else
     echo "      Downloading LiquidAI 2.6B GGUF (~1.67 GB)..."
-    curl -L "https://huggingface.co/LiquidCloud/LFM-2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_K_M.gguf" -o "$MODEL_PATH" || true
+    # -f: on an HTTP error, fail instead of saving the error page as the model.
+    if ! curl -fL "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_K_M.gguf" -o "$MODEL_PATH.part"; then
+        rm -f "$MODEL_PATH.part"
+        echo "      ⚠️  Model download failed. Run the installer again to retry."
+    else
+        mv "$MODEL_PATH.part" "$MODEL_PATH"
+    fi
 fi
 
 # Strip quarantine and apply valid ad-hoc code signature
