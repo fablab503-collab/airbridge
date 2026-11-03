@@ -25,6 +25,10 @@ curl -sSL https://raw.githubusercontent.com/fablab503-collab/airbridge/main/unin
 
 ---
 
+🗺️ **[`fsmap`](fsmap/)** — a strictly read-only tool that explains your disks (`fsmap volumes`) and shows what fills them (`fsmap scan`, with duplicates and an offline HTML report).
+
+---
+
 ## ⚡ Core Architecture & Dynamic Sizing
 
 1. **30% Capacity Baseline Rule**:
