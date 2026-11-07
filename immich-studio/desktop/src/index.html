@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gimmich</title>
+<style>
+@font-face { font-family: "Gimmich Roboto"; font-weight: 500; src: url(roboto-500.woff2) format("woff2"); }
+:root { --bg: #f6f7fb; --card: #fff; --text: #1d2130; --muted: #646b80; --line: #e2e5ee; --accent: #4250af; --accent-text: #fff; --bad: #b3261e; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #12131a; --card: #1b1d27; --text: #e8eaf2; --muted: #9aa1b8; --line: #2c2f3d; --accent: #aab4ff; --accent-text: #12131a; --bad: #ff8a80; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { min-height: 100%; display: grid; place-items: center; padding: 24px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 32px; width: min(460px, 100%); text-align: center; }
+img { width: 96px; height: auto; }
+h1 { font: 500 34px "Gimmich Roboto", Roboto, sans-serif; color: var(--accent); margin: 8px 0 4px; }
+p { color: var(--muted); margin: 0 0 20px; }
+input { width: 100%; font: inherit; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+button { margin-top: 12px; width: 100%; font: inherit; font-weight: 600; padding: 11px; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-text); cursor: pointer; }
+#err { color: var(--bad); min-height: 1.5em; margin: 10px 0 0; }
+small { display: block; margin-top: 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <form class="card" id="form">
+    <img src="logo.svg" alt="">
+    <h1>Gimmich</h1>
+    <p>Type the address of your Gimmich server.</p>
+    <input id="server" placeholder="https://imac.your-tailnet.ts.net" autocomplete="url" autofocus required>
+    <button type="submit">Open Gimmich</button>
+    <div id="err"></div>
+    <small>At home you can also use the iMac's local address, e.g. http://192.168.1.20:2283.<br>
+      Change it later with Gimmich → Change server…</small>
+  </form>
+</main>
+<script>
+const invoke = window.__TAURI__.core.invoke;
+const input = document.getElementById("server");
+invoke("current_server").then((s) => { if (s) input.value = s; });
+document.getElementById("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = document.getElementById("err");
+  err.textContent = "";
+  try { await invoke("save_server", { server: input.value }); }
+  catch (x) { err.textContent = String(x); }
+});
+</script>
+</body>
+</html>

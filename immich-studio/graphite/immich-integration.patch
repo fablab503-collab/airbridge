@@ -1,0 +1,89 @@
+diff --git a/frontend/src/App.svelte b/frontend/src/App.svelte
+index 49f4b20..49706c3 100644
+--- a/frontend/src/App.svelte
++++ b/frontend/src/App.svelte
+@@ -3,7 +3,7 @@
+ 	import Editor from "/src/components/Editor.svelte";
+ 	import { createSubscriptionsRouter } from "/src/subscriptions-router";
+ 	import type { MessageName, SubscriptionsRouter } from "/src/subscriptions-router";
+-	import { loadDemoArtwork } from "/src/utility-functions/network";
++	import { loadDemoArtwork, loadImmichPhoto } from "/src/utility-functions/network";
+ 	import { operatingSystem } from "/src/utility-functions/platform";
+ 	import { initWasm } from "/src/utility-functions/wasm-loader";
+ 	import { EditorWrapper, receiveNativeMessage } from "/wrapper/pkg/graphite_wasm_wrapper";
+@@ -29,6 +29,7 @@
+ 		});
+ 
+ 		await loadDemoArtwork(editor);
++		await loadImmichPhoto(editor);
+ 	});
+ 
+ 	onDestroy(() => {
+diff --git a/frontend/src/utility-functions/files.ts b/frontend/src/utility-functions/files.ts
+index b4690d9..d75de88 100644
+--- a/frontend/src/utility-functions/files.ts
++++ b/frontend/src/utility-functions/files.ts
+@@ -23,6 +23,21 @@ export function downloadFile(filename: string, content: Uint8Array) {
+ 	if (content.length > 0 && content.buffer instanceof ArrayBuffer) {
+ 		const contentView = new Uint8Array(content.buffer, content.byteOffset, content.byteLength);
+ 		const blob = new Blob([contentView], { type });
++
++		// Immich Studio: exported pictures go straight back into Immich when the editor was opened from there
++		const immichReturn = sessionStorage.getItem("immich-return");
++		if (immichReturn && /\.(png|jpe?g|webp|svg)$/i.test(filename)) {
++			const form = new FormData();
++			form.append("file", blob, filename);
++			fetch(immichReturn, { method: "POST", body: form, credentials: "include" })
++				.then((response) => {
++					if (!response.ok) throw new Error(`${response.status}`);
++					window.alert(`Saved "${filename}" to Immich.`);
++				})
++				.catch(() => downloadFileBlob(filename, blob));
++			return;
++		}
++
+ 		downloadFileBlob(filename, blob);
+ 	}
+ }
+diff --git a/frontend/src/utility-functions/network.ts b/frontend/src/utility-functions/network.ts
+index c0b1173..e842af4 100644
+--- a/frontend/src/utility-functions/network.ts
++++ b/frontend/src/utility-functions/network.ts
+@@ -53,3 +53,25 @@ export async function loadDemoArtwork(editor: EditorWrapper) {
+ 		// Do nothing
+ 	}
+ }
++
++// Immich Studio: open a photo given in the URL hash, e.g.
++// #immich-open=<photo url>&immich-name=<file name>&immich-return=<url that receives the exported file>
++export async function loadImmichPhoto(editor: EditorWrapper) {
++	const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
++	const source = params.get("immich-open");
++	if (!source) return;
++
++	const returnUrl = params.get("immich-return");
++	if (returnUrl) sessionStorage.setItem("immich-return", returnUrl);
++
++	try {
++		const response = await fetch(source, { credentials: "include" });
++		if (!response.ok) throw new Error(`${response.status}`);
++		const content = await response.bytes();
++		const filename = params.get("immich-name") || "Immich photo.jpg";
++		editor.ingestPicked(filename, response.headers.get("content-type") || "image/jpeg", content, "Open");
++		history.replaceState("", "", `${window.location.pathname}${window.location.search}`);
++	} catch {
++		editor.errorDialog("Could not open the Immich photo", "Immich Studio could not fetch the photo. Is Immich running?");
++	}
++}
+diff --git a/frontend/src/utility-functions/service-worker.ts b/frontend/src/utility-functions/service-worker.ts
+index 3d3b048..9b50c7c 100644
+--- a/frontend/src/utility-functions/service-worker.ts
++++ b/frontend/src/utility-functions/service-worker.ts
+@@ -1,4 +1,7 @@
+ export async function registerServiceWorker() {
++	// Immich Studio serves Graphite in a subfolder of Immich: its offline cache would store Immich's root page, so skip it there
++	if (import.meta.env.BASE_URL !== "/") return;
++
+ 	try {
+ 		const registration = await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
+ 
